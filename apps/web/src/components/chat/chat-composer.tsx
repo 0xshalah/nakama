@@ -915,7 +915,7 @@ function ChatComposerTextarea({
     [controller.textInput, onAddCommand, slashRange]
   );
 
-  const { setPrefix } = useContext(CommandPrefixContext);
+  const { prefix, setPrefix } = useContext(CommandPrefixContext);
   const value = controller.textInput.value;
   const setInput = controller.textInput.setInput;
 
@@ -957,6 +957,11 @@ function ChatComposerTextarea({
         }}
         onKeyDown={(event) => {
           if (!pickerOpen) {
+            if (event.key === "Escape" && prefix) {
+              event.preventDefault();
+              setPrefix(null);
+            }
+
             return;
           }
 
