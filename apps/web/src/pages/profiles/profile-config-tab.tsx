@@ -36,6 +36,7 @@ import { SoulTab } from "@/components/soul-tools/SoulTab";
 import { TelegramSettingsCard } from "@/components/TelegramSettingsCard";
 import { WhatsAppSettingsCard } from "@/components/WhatsAppSettingsCard";
 import { useAuth } from "@/context/use-auth";
+import { useAppNavigation } from "@/hooks/use-app-navigation";
 import {
   ChannelProfileContext,
   useChannelProfileId,
@@ -51,6 +52,8 @@ import {
   ProfileSystemPromptCard,
 } from "@/pages/profiles/profile-config-identity-section";
 import { ProfileHistoryTab } from "@/pages/profiles/profile-history-tab";
+import { ProfileMcpSection } from "@/pages/profiles/profile-mcp-section";
+import { ProfileSkillsSection } from "@/pages/profiles/profile-skills-section";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
 const sectionTabClass =
@@ -62,6 +65,7 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
   const [moveOpen, setMoveOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const { channels, error: channelsError, isPending } = useProfileChannels();
+  const { navigateToSkillDetail } = useAppNavigation();
 
   const [section, setSection] = useState(
     state.detailTab === "proposals"
@@ -100,6 +104,16 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
       hint: String(detail.tools.filter((tool) => !tool.pluginId).length),
       label: "Tools",
       value: "tools",
+    },
+    {
+      hint: String(detail.mcpServers.length),
+      label: "MCP",
+      value: "mcp",
+    },
+    {
+      hint: String(detail.skills.filter((skill) => !skill.pluginId).length),
+      label: "Skills",
+      value: "skills",
     },
   ];
 
@@ -169,6 +183,33 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
         ) : null}
         <Tabs.Panel className="w-0 min-w-full" value="tools">
           <ProfileConfigAssignmentsSection key={detail.id} state={state} />
+        </Tabs.Panel>
+        <Tabs.Panel className="w-0 min-w-full" value="mcp">
+          <ProfileMcpSection
+            allMcpServers={state.allMcpServers}
+            busy={busy || !state.canManageProfile}
+            detail={detail}
+            onCreateOpen={() => state.setMcpCreateOpen(true)}
+            onRemove={state.setRemoveConfirm}
+          />
+        </Tabs.Panel>
+        <Tabs.Panel className="w-0 min-w-full" value="skills">
+          <ProfileSkillsSection
+            allSkills={state.allSkills.filter((skill) => !skill.pluginId)}
+            busy={busy || !state.canManageProfile}
+            detail={{
+              ...detail,
+              skills: detail.skills.filter((skill) => !skill.pluginId),
+            }}
+            onAddOpen={() => state.setSkillInstallOpen(true)}
+            onCreateOpen={() => state.setSkillCreateOpen(true)}
+            onRemove={state.setRemoveConfirm}
+            onViewDetail={(skillId) => {
+              navigateToSkillDetail(skillId, {
+                profileId: selectedId ?? undefined,
+              });
+            }}
+          />
         </Tabs.Panel>
       </Tabs.Root>
       {(showChannels || canCreateProfile) && selectedId ? (

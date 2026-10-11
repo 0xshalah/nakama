@@ -103,6 +103,7 @@ export function ProfileConfigIdentitySection({
         type="file"
       />
       <EditableProfileAvatar
+        avatarClassName="outline-none"
         disabled={
           identityDisabled ||
           uploadAvatarMutation.isPending ||

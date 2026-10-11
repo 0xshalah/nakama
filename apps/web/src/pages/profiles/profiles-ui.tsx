@@ -102,7 +102,9 @@ export function EditableProfileAvatar({
   onPick,
   onRemove,
   size = "md",
+  avatarClassName,
 }: {
+  avatarClassName?: string;
   profile: ProfileSummary;
   disabled: boolean;
   uploading: boolean;
@@ -129,7 +131,11 @@ export function EditableProfileAvatar({
               />
             }
           >
-            <ProfileAvatar profile={profile} size={size} />
+            <ProfileAvatar
+              className={avatarClassName}
+              profile={profile}
+              size={size}
+            />
             <ProfileAvatarOverlay size={size} uploading={uploading} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-40">
@@ -168,7 +174,11 @@ export function EditableProfileAvatar({
       onClick={onPick}
       type="button"
     >
-      <ProfileAvatar profile={profile} size={size} />
+      <ProfileAvatar
+        className={avatarClassName}
+        profile={profile}
+        size={size}
+      />
       <ProfileAvatarOverlay size={size} uploading={uploading} />
     </button>
   );

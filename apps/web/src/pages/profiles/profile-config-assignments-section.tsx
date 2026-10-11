@@ -6,7 +6,6 @@ import { useState } from "react";
 import { SkillProposalsPanel } from "@/components/profiles/SkillProposalsPanel";
 import { ToolAssignDialog } from "@/components/ToolAssignDialog";
 import { useAuth } from "@/context/use-auth";
-import { useAppNavigation } from "@/hooks/use-app-navigation";
 import {
   pluginAgentAccessState,
   useOrgPlugins,
@@ -16,8 +15,6 @@ import { useSkillProposals } from "@/hooks/use-skill-proposals";
 import { formatError } from "@/lib/client";
 import { pluginIcon } from "@/lib/navigation";
 import { ProfileComposioSection } from "@/pages/profiles/profile-composio-section";
-import { ProfileMcpSection } from "@/pages/profiles/profile-mcp-section";
-import { ProfileSkillsSection } from "@/pages/profiles/profile-skills-section";
 import { ProfileToolsSection } from "@/pages/profiles/profile-tools-section";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
@@ -33,19 +30,13 @@ export function ProfileConfigAssignmentsSection({
     availableTools,
     handleAssignTool,
     setRemoveConfirm,
-    allMcpServers,
-    setMcpCreateOpen,
     composioToolkitsData,
     assignedComposioToolkits,
     availableComposioToolkits,
     handleAssignComposioToolkit,
-    allSkills,
-    setSkillCreateOpen,
-    setSkillInstallOpen,
     selectedId,
   } = state;
 
-  const { navigateToSkillDetail } = useAppNavigation();
   const { activeOrg } = useAuth();
   const isOrgAdmin = activeOrg?.role === "admin";
   const [capability, setCapability] = useState("tools");
@@ -87,8 +78,6 @@ export function ProfileConfigAssignmentsSection({
           {[
             { label: "Tools", value: "tools" },
             { label: "Plugins", value: "plugins" },
-            { label: "MCP", value: "mcp" },
-            { label: "Skills", value: "skills" },
             ...(composioToolkitsData?.configured
               ? [{ label: "Apps", value: "apps" }]
               : []),
@@ -151,15 +140,6 @@ export function ProfileConfigAssignmentsSection({
       <Tabs.Panel value="plugins">
         <ProfilePluginsSection state={state} />
       </Tabs.Panel>
-      <Tabs.Panel value="mcp">
-        <ProfileMcpSection
-          allMcpServers={allMcpServers}
-          busy={readOnly}
-          detail={detail}
-          onCreateOpen={() => setMcpCreateOpen(true)}
-          onRemove={setRemoveConfirm}
-        />
-      </Tabs.Panel>
       <Tabs.Panel value="apps">
         <ProfileComposioSection
           assignedComposioToolkits={assignedComposioToolkits}
@@ -168,24 +148,6 @@ export function ProfileConfigAssignmentsSection({
           composioToolkitsData={composioToolkitsData}
           onAssign={handleAssignComposioToolkit}
           onRemove={setRemoveConfirm}
-        />
-      </Tabs.Panel>
-      <Tabs.Panel value="skills">
-        <ProfileSkillsSection
-          allSkills={allSkills.filter((skill) => !skill.pluginId)}
-          busy={readOnly}
-          detail={{
-            ...detail,
-            skills: detail.skills.filter((skill) => !skill.pluginId),
-          }}
-          onAddOpen={() => setSkillInstallOpen(true)}
-          onCreateOpen={() => setSkillCreateOpen(true)}
-          onRemove={setRemoveConfirm}
-          onViewDetail={(skillId) => {
-            navigateToSkillDetail(skillId, {
-              profileId: selectedId ?? undefined,
-            });
-          }}
         />
       </Tabs.Panel>
     </Tabs.Root>
