@@ -6,6 +6,7 @@ import {
   filterReservedSlashCommands,
   filterSkillsForSlashQuery,
   findActiveSkillSlashRange,
+  getLeadingCommand,
   getMentionTokenRanges,
   getReservedCommandTokenRanges,
   getSkillTokenRanges,
@@ -350,5 +351,30 @@ describe("@ mentions", () => {
       { end: 25, name: "image", start: 19 },
     ]);
     expect(getMentionTokenRanges("me@image.dev @images")).toEqual([]);
+  });
+});
+
+describe("getLeadingCommand", () => {
+  test("finds a leading reserved command", () => {
+    const found = getLeadingCommand("/enable-learning-loop now", [
+      manageSkillsSkill,
+    ]);
+
+    expect(found?.range).toEqual({
+      end: 21,
+      name: "enable-learning-loop",
+      start: 0,
+    });
+  });
+
+  test("finds a leading skill token", () => {
+    const found = getLeadingCommand("/skill weather rain?", [weatherSkill]);
+
+    expect(found?.range.name).toBe("weather");
+    expect(found?.description).toBe(weatherSkill.description.trim());
+  });
+
+  test("ignores a command mid-sentence", () => {
+    expect(getLeadingCommand("run /skill weather", [weatherSkill])).toBeNull();
   });
 });

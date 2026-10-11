@@ -341,3 +341,38 @@ export function getMentionTokenRanges(value: string): SkillTokenRange[] {
     return { end: start + token.length, name: token.slice(1), start };
   });
 }
+
+export interface LeadingCommand {
+  description: string;
+  range: SkillTokenRange;
+}
+
+/** The leading `/learn` or `/skill name` token, with what it does, for the composer banner. */
+export function getLeadingCommand(
+  value: string,
+  skills: SkillSummary[]
+): LeadingCommand | null {
+  const leadingOffset = value.length - value.trimStart().length;
+
+  for (const range of getReservedCommandTokenRanges(value, {
+    enableLearn: profileCanUseLearnCommand(skills),
+  })) {
+    const command = RESERVED_COMPOSER_SLASH_COMMANDS.find(
+      (candidate) => candidate.name === range.name
+    );
+
+    if (command && range.start === leadingOffset) {
+      return { description: command.description, range };
+    }
+  }
+
+  for (const range of getSkillTokenRanges(value)) {
+    const skill = skills.find((candidate) => candidate.name === range.name);
+
+    if (skill && range.start === leadingOffset) {
+      return { description: skill.description.trim(), range };
+    }
+  }
+
+  return null;
+}

@@ -39,8 +39,10 @@ import {
   WifiOff01Icon,
 } from "hugeicons-react";
 import {
+  createContext,
   type ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -77,6 +79,7 @@ import {
   filterComposerMentionSuggestions,
   filterComposerSlashSuggestions,
   findActiveSkillSlashRange,
+  getLeadingCommand,
   matchComposerAddCommand,
   matchComposerLearningLoopCommand,
   replaceSlashRangeWithReservedCommand,
@@ -341,6 +344,7 @@ function ChatComposerStackedPrompt({
         prepareFiles={prepareChatUploadFiles}
         rimActive={busy}
       >
+        <ChatComposerCommandBanner availableSkills={availableSkills} />
         <ChatAttachmentHeader primarySupportsVision={primarySupportsVision} />
         <PromptInputBody>
           <ChatComposerTextarea
@@ -439,6 +443,7 @@ function ChatComposerBarePrompt({
         prepareFiles={isMinimal ? undefined : prepareChatUploadFiles}
         rimActive={busy}
       >
+        <ChatComposerCommandBanner availableSkills={availableSkills} />
         {isMinimal ? null : (
           <ChatAttachmentHeader primarySupportsVision={primarySupportsVision} />
         )}
@@ -609,6 +614,42 @@ function ChatComposerMain({
   );
 }
 
+const CommandPrefixContext = createContext<{
+  prefix: string | null;
+  setPrefix: (prefix: string | null) => void;
+}>({ prefix: null, setPrefix: () => undefined });
+
+/** Strip above the input showing the selected leading command; its text lives outside the textarea. */
+function ChatComposerCommandBanner({
+  availableSkills,
+}: {
+  availableSkills: SkillSummary[];
+}) {
+  const { prefix, setPrefix } = useContext(CommandPrefixContext);
+  const command = prefix ? getLeadingCommand(prefix, availableSkills) : null;
+
+  if (!(prefix && command)) {
+    return null;
+  }
+
+  return (
+    <PromptInputHeader className="-mx-2.5 -mt-2.5 mb-1.5 w-auto flex-nowrap items-center gap-2 rounded-t-xl border-border border-b bg-muted/60 px-4 py-2 text-sm sm:-mx-3 sm:-mt-3">
+      <span className="shrink-0 font-semibold text-foreground">{prefix}</span>
+      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+        {command.description}
+      </span>
+      <button
+        aria-label="Remove command"
+        className="shrink-0 rounded px-1 text-muted-foreground hover:text-foreground"
+        onClick={() => setPrefix(null)}
+        type="button"
+      >
+        ×
+      </button>
+    </PromptInputHeader>
+  );
+}
+
 export function ChatComposer(props: ChatComposerProps) {
   const { activeOrg, updateOrg, user } = useAuth();
   const { textInput } = usePromptInputController();
@@ -617,9 +658,18 @@ export function ChatComposer(props: ChatComposerProps) {
     null
   );
 
+  const [commandPrefix, setCommandPrefix] = useState<string | null>(null);
+  const commandContext = useMemo(
+    () => ({ prefix: commandPrefix, setPrefix: setCommandPrefix }),
+    [commandPrefix]
+  );
+
   useEffect(() => {
-    storeComposerDraft(props.draftStorageKey ?? null, textInput.value);
-  }, [props.draftStorageKey, textInput.value]);
+    storeComposerDraft(
+      props.draftStorageKey ?? null,
+      commandPrefix ? `${commandPrefix} ${textInput.value}` : textInput.value
+    );
+  }, [commandPrefix, props.draftStorageKey, textInput.value]);
 
   function clearDraft() {
     if (!props.draftStorageKey) {
@@ -642,7 +692,13 @@ export function ChatComposer(props: ChatComposerProps) {
 
   const composerProps: ChatComposerProps = {
     ...props,
-    onSubmit: (text, files) => {
+    onSubmit: (typedText, files) => {
+      const text = commandPrefix
+        ? `${commandPrefix} ${typedText}`.trim()
+        : typedText;
+
+      setCommandPrefix(null);
+
       if (matchComposerLearningLoopCommand(text)) {
         clearDraft();
 
@@ -696,39 +752,43 @@ export function ChatComposer(props: ChatComposerProps) {
       : null;
 
   return (
-    <div className={cn("w-full shrink-0", props.className)}>
-      {layout.showOfflineHint && isFullComposer(props) ? (
-        <ChatComposerOfflineHint onConnectProvider={props.onConnectProvider} />
-      ) : null}
-      <ChatComposerMain
-        displayError={displayError}
-        layout={layout}
-        onAddCommand={openAddCommand}
-        props={composerProps}
-        setAttachmentError={setAttachmentError}
-      />
-      {addProfileId ? (
-        <ChatAddCapabilitiesDialogs
-          mcpOpen={addDialog === "add-mcp"}
-          onMcpOpenChange={(open) => {
-            setAddDialog(open ? "add-mcp" : null);
-          }}
-          onPluginOpenChange={(open) =>
-            setAddDialog(open ? "add-plugin" : null)
-          }
-          onSkillOpenChange={(open) => {
-            setAddDialog(open ? "add-skill" : null);
-          }}
-          onToolOpenChange={(open) => {
-            setAddDialog(open ? "add-tool" : null);
-          }}
-          pluginOpen={addDialog === "add-plugin"}
-          profileId={addProfileId}
-          skillOpen={addDialog === "add-skill"}
-          toolOpen={addDialog === "add-tool"}
+    <CommandPrefixContext.Provider value={commandContext}>
+      <div className={cn("w-full shrink-0", props.className)}>
+        {layout.showOfflineHint && isFullComposer(props) ? (
+          <ChatComposerOfflineHint
+            onConnectProvider={props.onConnectProvider}
+          />
+        ) : null}
+        <ChatComposerMain
+          displayError={displayError}
+          layout={layout}
+          onAddCommand={openAddCommand}
+          props={composerProps}
+          setAttachmentError={setAttachmentError}
         />
-      ) : null}
-    </div>
+        {addProfileId ? (
+          <ChatAddCapabilitiesDialogs
+            mcpOpen={addDialog === "add-mcp"}
+            onMcpOpenChange={(open) => {
+              setAddDialog(open ? "add-mcp" : null);
+            }}
+            onPluginOpenChange={(open) =>
+              setAddDialog(open ? "add-plugin" : null)
+            }
+            onSkillOpenChange={(open) => {
+              setAddDialog(open ? "add-skill" : null);
+            }}
+            onToolOpenChange={(open) => {
+              setAddDialog(open ? "add-tool" : null);
+            }}
+            pluginOpen={addDialog === "add-plugin"}
+            profileId={addProfileId}
+            skillOpen={addDialog === "add-skill"}
+            toolOpen={addDialog === "add-tool"}
+          />
+        ) : null}
+      </div>
+    </CommandPrefixContext.Provider>
   );
 }
 
@@ -855,11 +915,27 @@ function ChatComposerTextarea({
     [controller.textInput, onAddCommand, slashRange]
   );
 
+  const { setPrefix } = useContext(CommandPrefixContext);
+  const value = controller.textInput.value;
+  const setInput = controller.textInput.setInput;
+
+  // Move a finished leading command (`/learn `, `/skill name `) out of the text.
+  useEffect(() => {
+    const command = getLeadingCommand(value, availableSkills);
+    const next = command ? value[command.range.end] : undefined;
+
+    if (!(command && next && /\s/.test(next))) {
+      return;
+    }
+
+    setPrefix(value.slice(command.range.start, command.range.end));
+    setInput(value.slice(command.range.end).replace(/^[ \t]/, ""));
+  }, [availableSkills, setInput, setPrefix, value]);
+
   return (
     <div className="relative min-w-0 flex-1">
       <ChatSkillTokenOverlay
         className={className}
-        skills={availableSkills}
         value={controller.textInput.value}
       />
       {pickerOpen ? (
@@ -1183,9 +1259,11 @@ function ChatComposerSubmitButton({
 }) {
   const controller = usePromptInputController();
   const attachments = usePromptInputAttachments();
+  const { prefix: commandPrefix } = useContext(CommandPrefixContext);
 
   const hasContent =
     controller.textInput.value.trim().length > 0 ||
+    commandPrefix !== null ||
     attachments.files.length > 0;
 
   const { showStop, showSubmit } = composerActions({ canStop, hasContent });

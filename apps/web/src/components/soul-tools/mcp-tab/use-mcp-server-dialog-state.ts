@@ -118,7 +118,7 @@ function applyMcpFormReset({
 
   if (!server) {
     setters.setName("");
-    setters.setKind("http");
+    setters.setKind("signin");
     setters.setUrl("");
     setters.setHeaders([emptyHeaderRow()]);
     setters.setCommand("");
@@ -312,7 +312,7 @@ export function useMcpServerDialogState({
   );
 
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<McpServerKind>("http");
+  const [kind, setKind] = useState<McpServerKind>("signin");
   const [url, setUrl] = useState("");
   const [headers, setHeaders] = useState<McpHeaderRow[]>([emptyHeaderRow()]);
   const [command, setCommand] = useState("");

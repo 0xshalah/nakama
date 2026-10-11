@@ -1,5 +1,6 @@
 import type { ErrorTrackingSettingsResponse } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { buttonVariants } from "@nakama/ui/button-variants";
 import {
   InputGroup,
   InputGroupAddon,
@@ -386,14 +387,15 @@ function DsnActions({
         </Button>
       )}
       {dashboardUrl ? (
-        <Button
-          nativeButton={false}
-          render={<a href={dashboardUrl} rel="noreferrer" target="_blank" />}
-          variant="outline"
+        <a
+          className={buttonVariants({ variant: "outline" })}
+          href={dashboardUrl}
+          rel="noreferrer"
+          target="_blank"
         >
           Open dashboard
           <LinkSquare02Icon aria-hidden className="size-4" />
-        </Button>
+        </a>
       ) : null}
     </div>
   );

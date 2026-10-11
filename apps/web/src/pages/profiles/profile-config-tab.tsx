@@ -59,45 +59,89 @@ import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 const sectionTabClass =
   "whitespace-nowrap rounded-full px-2 py-1.5 text-center font-medium text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm sm:px-3";
 
-export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
-  const { user, activeOrg } = useAuth();
-  const { hash } = useLocation();
-  const [moveOpen, setMoveOpen] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
-  const { channels, error: channelsError, isPending } = useProfileChannels();
-  const { navigateToSkillDetail } = useAppNavigation();
-
-  const [section, setSection] = useState(
-    state.detailTab === "proposals"
-      ? "tools"
-      : hash === "#profile-connections"
-        ? "channels"
-        : "prompt"
+function ProfilePromptPanel({
+  state,
+  canPack,
+  canCreateProfile,
+  profileId,
+}: {
+  state: ProfilesPageState;
+  canPack: boolean;
+  canCreateProfile: boolean;
+  profileId: string;
+}) {
+  return (
+    <>
+      <ProfileSystemPromptCard state={state} />
+      {canPack ? (
+        <section className="space-y-4" id="profile-prompt">
+          {canCreateProfile ? <SoulTab profileId={profileId} /> : null}
+          <details className="group/history">
+            <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-muted-foreground/55 text-sm hover:text-muted-foreground [&::-webkit-details-marker]:hidden">
+              <span>Change histories</span>
+              <ArrowDown01Icon
+                aria-hidden="true"
+                className="size-3.5 -rotate-90 transition-transform group-open/history:rotate-0"
+              />
+            </summary>
+            <div className="pt-3">
+              <ProfileHistoryTab profileId={profileId} />
+            </div>
+          </details>
+        </section>
+      ) : null}
+    </>
   );
+}
 
-  if (!state.detail) {
-    return null;
+function initialProfileSection(detailTab: string, hash: string) {
+  if (detailTab === "proposals") {
+    return "tools";
   }
 
-  const canCreateProfile = user?.isPlatformAdmin === true;
-  const isOrgAdmin = activeOrg?.role === "admin";
-  const canPack = isOrgAdmin || canCreateProfile;
-  const { busy, detail, selectedId } = state;
-  const showChannels = canPack && !detail.isSuper;
-  const channelsReady = !(isPending || channelsError);
+  return hash === "#profile-connections" ? "channels" : "prompt";
+}
 
-  const sections = [
+function ProfileSectionTab({
+  hint,
+  label,
+  value,
+}: {
+  hint: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <Tabs.Tab className={sectionTabClass} value={value}>
+      {label}
+      {hint ? (
+        <span className="ml-1.5 hidden text-muted-foreground/70 text-xs tabular-nums sm:inline">
+          {hint}
+        </span>
+      ) : null}
+    </Tabs.Tab>
+  );
+}
+
+function buildProfileSections({
+  channels,
+  detail,
+  isOrgAdmin,
+  showChannels,
+}: {
+  channels: { connected: boolean }[] | null;
+  detail: NonNullable<ProfilesPageState["detail"]>;
+  isOrgAdmin: boolean;
+  showChannels: boolean;
+}) {
+  const channelHint = channels
+    ? `${channels.filter((channel) => channel.connected).length}/${channels.length}`
+    : "";
+
+  return [
     { hint: "", label: "Prompt", value: "prompt" },
     ...(showChannels
-      ? [
-          {
-            hint: channelsReady
-              ? `${channels.filter((channel) => channel.connected).length}/${channels.length}`
-              : "",
-            label: "Channels",
-            value: "channels",
-          },
-        ]
+      ? [{ hint: channelHint, label: "Channels", value: "channels" }]
       : []),
     ...(isOrgAdmin ? [{ hint: "", label: "Behavior", value: "behavior" }] : []),
     {
@@ -116,6 +160,37 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
       value: "skills",
     },
   ];
+}
+
+export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
+  const { user, activeOrg } = useAuth();
+  const { hash } = useLocation();
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const { channels, error: channelsError, isPending } = useProfileChannels();
+  const { navigateToSkillDetail } = useAppNavigation();
+
+  const [section, setSection] = useState(() =>
+    initialProfileSection(state.detailTab, hash)
+  );
+
+  if (!state.detail) {
+    return null;
+  }
+
+  const canCreateProfile = user?.isPlatformAdmin === true;
+  const isOrgAdmin = activeOrg?.role === "admin";
+  const canPack = isOrgAdmin || canCreateProfile;
+  const { busy, detail, selectedId } = state;
+  const showChannels = canPack && !detail.isSuper;
+  const channelsReady = !(isPending || channelsError);
+
+  const sections = buildProfileSections({
+    channels: showChannels && channelsReady ? channels : null,
+    detail,
+    isOrgAdmin,
+    showChannels,
+  });
 
   return (
     <div
@@ -135,36 +210,17 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
           aria-label="Agent sections"
           className="mx-auto grid w-full max-w-full auto-cols-fr grid-flow-col gap-1 overflow-x-auto rounded-full bg-muted p-1 sm:w-fit"
         >
-          {sections.map(({ hint, label, value }) => (
-            <Tabs.Tab className={sectionTabClass} key={value} value={value}>
-              {label}
-              {hint ? (
-                <span className="ml-1.5 hidden text-muted-foreground/70 text-xs tabular-nums sm:inline">
-                  {hint}
-                </span>
-              ) : null}
-            </Tabs.Tab>
+          {sections.map((item) => (
+            <ProfileSectionTab key={item.value} {...item} />
           ))}
         </Tabs.List>
         <Tabs.Panel className="w-0 min-w-full space-y-6" value="prompt">
-          <ProfileSystemPromptCard state={state} />
-          {canPack ? (
-            <section className="space-y-4" id="profile-prompt">
-              {canCreateProfile ? <SoulTab profileId={detail.id} /> : null}
-              <details className="group/history">
-                <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-muted-foreground/55 text-sm hover:text-muted-foreground [&::-webkit-details-marker]:hidden">
-                  <span>Change histories</span>
-                  <ArrowDown01Icon
-                    aria-hidden="true"
-                    className="size-3.5 -rotate-90 transition-transform group-open/history:rotate-0"
-                  />
-                </summary>
-                <div className="pt-3">
-                  <ProfileHistoryTab profileId={detail.id} />
-                </div>
-              </details>
-            </section>
-          ) : null}
+          <ProfilePromptPanel
+            canCreateProfile={canCreateProfile}
+            canPack={canPack}
+            profileId={detail.id}
+            state={state}
+          />
         </Tabs.Panel>
         {showChannels ? (
           <Tabs.Panel className="w-0 min-w-full" value="channels">

@@ -892,6 +892,258 @@ export function AutomationExample({
   );
 }
 
+function RunHistoryRow({
+  run,
+  maxDurationMs,
+  onSelect,
+}: {
+  run: AutomationRunRecord;
+  maxDurationMs: number;
+  onSelect: (runId: string) => void;
+}) {
+  const durationMs = runDurationMs(run);
+
+  return (
+    <li className="flex min-w-0 items-center gap-2 py-3">
+      <DialogPrimitive.Trigger
+        aria-label={`Open run from ${formatSessionTimestamp(run.startedAt)}`}
+        className="flex min-w-0 flex-1 items-center gap-3.5 text-left"
+        onClick={() => onSelect(run.id)}
+        title={`${runStatusLabel(run.status)} · ${formatSessionTimestamp(run.startedAt)}`}
+      >
+        {run.status === "running" ? (
+          <RunStatusIcon status={run.status} />
+        ) : (
+          <span
+            aria-label={runStatusLabel(run.status)}
+            className={cn(
+              "size-2 shrink-0 rounded-full",
+              run.status === "failed"
+                ? "bg-destructive"
+                : "bg-emerald-600 dark:bg-emerald-400"
+            )}
+            role="img"
+          />
+        )}
+        {run.read === false ? (
+          <span
+            aria-label="Unread"
+            className="size-1.5 shrink-0 rounded-full bg-primary"
+          />
+        ) : null}
+        <span
+          className={cn(
+            "line-clamp-1 min-w-0 flex-1 text-sm",
+            run.status === "failed" ? "text-destructive" : "text-foreground/80"
+          )}
+        >
+          {runPreviewText(run) || runStatusLabel(run.status)}
+          {run.deliveryStatus === "failed" ? " · Delivery failed" : ""}
+        </span>
+        <span className="hidden w-16 shrink-0 text-muted-foreground text-xs sm:block">
+          {formatSessionRelativeTime(run.startedAt)}
+        </span>
+        <span
+          aria-hidden
+          className="relative hidden h-1.5 w-24 shrink-0 rounded-full bg-muted sm:block"
+        >
+          <span
+            className={cn(
+              "absolute inset-y-0 left-0 rounded-full",
+              run.status === "failed"
+                ? "bg-destructive/40"
+                : "bg-muted-foreground/40"
+            )}
+            style={{
+              width: `${Math.max(3, Math.round((durationMs / maxDurationMs) * 100))}%`,
+            }}
+          />
+        </span>
+        <span className="w-16 shrink-0 whitespace-nowrap text-right text-muted-foreground text-xs tabular-nums">
+          {formatRunDuration(run.startedAt, run.completedAt) ?? ""}
+        </span>
+      </DialogPrimitive.Trigger>
+    </li>
+  );
+}
+
+function RunStatusBar({
+  runs,
+  completedCount,
+  failedCount,
+}: {
+  runs: AutomationRunRecord[];
+  completedCount: number;
+  failedCount: number;
+}) {
+  return (
+    <div
+      aria-label={`${completedCount} completed, ${failedCount} failed`}
+      className="flex gap-1"
+      role="img"
+    >
+      {runs.map((run) => (
+        <span
+          className={cn(
+            "h-2 min-w-0 flex-1 rounded-full",
+            run.status === "failed"
+              ? "bg-destructive"
+              : run.status === "completed"
+                ? "bg-emerald-600 dark:bg-emerald-400"
+                : "bg-muted-foreground/40"
+          )}
+          key={run.id}
+        />
+      ))}
+    </div>
+  );
+}
+
+function RunDetailPopup({
+  selectedRun,
+  busy,
+  running,
+  profileId,
+  onRerun,
+}: {
+  selectedRun: AutomationRunRecord | undefined;
+  busy: boolean;
+  running: boolean;
+  profileId: string;
+  onRerun: () => void;
+}) {
+  const [copiedRunId, setCopiedRunId] = useState<string | null>(null);
+
+  return (
+    <DialogPrimitive.Popup className="fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl translate-x-0 flex-col border-border border-l bg-background shadow-xl outline-none transition-transform duration-200 ease-out data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full motion-reduce:transition-none">
+      <div className="flex shrink-0 items-center gap-3 border-border border-b px-4 py-3">
+        {selectedRun ? <RunStatusIcon status={selectedRun.status} /> : null}
+        <DialogTitle className="min-w-0 flex-1 truncate text-sm">
+          {selectedRun
+            ? `${runStatusLabel(selectedRun.status)} · ${formatSessionTimestamp(selectedRun.startedAt)}`
+            : "Run conversation"}
+        </DialogTitle>
+        {selectedRun ? (
+          <Button
+            aria-label={
+              copiedRunId === selectedRun.id ? "Copied run ID" : "Copy run ID"
+            }
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(selectedRun.id);
+                setCopiedRunId(selectedRun.id);
+              } catch {
+                // Clipboard may be unavailable outside a secure context.
+              }
+            }}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            {copiedRunId === selectedRun.id ? (
+              <CheckmarkCircle01Icon aria-hidden className="size-4" />
+            ) : (
+              <Copy01Icon aria-hidden className="size-4" />
+            )}
+          </Button>
+        ) : null}
+        {selectedRun?.status === "failed" ? (
+          <Button
+            disabled={busy || running}
+            onClick={onRerun}
+            size="sm"
+            variant="ghost"
+          >
+            Run again
+          </Button>
+        ) : null}
+        <DialogPrimitive.Close
+          render={
+            <Button
+              aria-label="Close run conversation"
+              size="icon-sm"
+              variant="ghost"
+            />
+          }
+        >
+          <Cancel01Icon aria-hidden className="size-4" />
+        </DialogPrimitive.Close>
+      </div>
+      {selectedRun?.deliveryError ? (
+        <p className="px-4 py-2 text-destructive text-sm" role="alert">
+          {selectedRun.deliveryError}
+        </p>
+      ) : null}
+      {selectedRun ? (
+        <ChatMessageList
+          actionsDisabled
+          className="min-h-0 flex-1"
+          emptyMessage={
+            selectedRun.status === "running"
+              ? "Waiting for output…"
+              : "No output returned."
+          }
+          key={selectedRun.id}
+          messages={automationRunMessages(selectedRun)}
+          profileId={profileId}
+          readOnly
+          streamActive={selectedRun.status === "running"}
+          turnStartedAt={selectedRun.startedAt}
+        />
+      ) : null}
+    </DialogPrimitive.Popup>
+  );
+}
+
+function RunPagination({
+  currentPage,
+  pageCount,
+  pageSize,
+  pageStart,
+  total,
+  onPageChange,
+}: {
+  currentPage: number;
+  pageCount: number;
+  pageSize: number;
+  pageStart: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (pageCount <= 1) {
+    return null;
+  }
+
+  return (
+    <nav
+      aria-label="Run history pages"
+      className="flex items-center justify-between text-muted-foreground text-xs"
+    >
+      <span className="tabular-nums">
+        {pageStart + 1}–{pageStart + pageSize} of {total}
+      </span>
+      <div className="flex gap-1">
+        <Button
+          disabled={currentPage === 0}
+          onClick={() => onPageChange(currentPage - 1)}
+          size="sm"
+          variant="ghost"
+        >
+          Previous
+        </Button>
+        <Button
+          disabled={currentPage >= pageCount - 1}
+          onClick={() => onPageChange(currentPage + 1)}
+          size="sm"
+          variant="ghost"
+        >
+          Next
+        </Button>
+      </div>
+    </nav>
+  );
+}
+
 export function RunHistoryList({
   runs,
   busy,
@@ -906,7 +1158,6 @@ export function RunHistoryList({
   onRerun: () => void;
 }) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [copiedRunId, setCopiedRunId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const selectedRun = runs.find((run) => run.id === selectedRunId);
   const [page, setPage] = useState(0);
@@ -937,25 +1188,11 @@ export function RunHistoryList({
       open={open && Boolean(selectedRun)}
     >
       <div className="space-y-4">
-        <div
-          aria-label={`${completedCount} completed, ${failedCount} failed`}
-          className="flex gap-1"
-          role="img"
-        >
-          {runs.map((run) => (
-            <span
-              className={cn(
-                "h-2 min-w-0 flex-1 rounded-full",
-                run.status === "failed"
-                  ? "bg-destructive"
-                  : run.status === "completed"
-                    ? "bg-emerald-600 dark:bg-emerald-400"
-                    : "bg-muted-foreground/40"
-              )}
-              key={run.id}
-            />
-          ))}
-        </div>
+        <RunStatusBar
+          completedCount={completedCount}
+          failedCount={failedCount}
+          runs={runs}
+        />
         <div className="flex gap-4 text-muted-foreground text-xs">
           <span>{completedCount} completed</span>
           {failedCount > 0 ? (
@@ -963,187 +1200,33 @@ export function RunHistoryList({
           ) : null}
         </div>
         <ul className="divide-y divide-border">
-          {pageRuns.map((run) => {
-            const durationMs = runDurationMs(run);
-
-            return (
-              <li className="flex min-w-0 items-center gap-2 py-3" key={run.id}>
-                <DialogPrimitive.Trigger
-                  aria-label={`Open run from ${formatSessionTimestamp(run.startedAt)}`}
-                  className="flex min-w-0 flex-1 items-center gap-3.5 text-left"
-                  onClick={() => setSelectedRunId(run.id)}
-                  title={`${runStatusLabel(run.status)} · ${formatSessionTimestamp(run.startedAt)}`}
-                >
-                  {run.status === "running" ? (
-                    <RunStatusIcon status={run.status} />
-                  ) : (
-                    <span
-                      aria-label={runStatusLabel(run.status)}
-                      className={cn(
-                        "size-2 shrink-0 rounded-full",
-                        run.status === "failed"
-                          ? "bg-destructive"
-                          : "bg-emerald-600 dark:bg-emerald-400"
-                      )}
-                      role="img"
-                    />
-                  )}
-                  {run.read === false ? (
-                    <span
-                      aria-label="Unread"
-                      className="size-1.5 shrink-0 rounded-full bg-primary"
-                    />
-                  ) : null}
-                  <span
-                    className={cn(
-                      "line-clamp-1 min-w-0 flex-1 text-sm",
-                      run.status === "failed"
-                        ? "text-destructive"
-                        : "text-foreground/80"
-                    )}
-                  >
-                    {runPreviewText(run) || runStatusLabel(run.status)}
-                    {run.deliveryStatus === "failed"
-                      ? " · Delivery failed"
-                      : ""}
-                  </span>
-                  <span className="hidden w-16 shrink-0 text-muted-foreground text-xs sm:block">
-                    {formatSessionRelativeTime(run.startedAt)}
-                  </span>
-                  <span
-                    aria-hidden
-                    className="relative hidden h-1.5 w-24 shrink-0 rounded-full bg-muted sm:block"
-                  >
-                    <span
-                      className={cn(
-                        "absolute inset-y-0 left-0 rounded-full",
-                        run.status === "failed"
-                          ? "bg-destructive/40"
-                          : "bg-muted-foreground/40"
-                      )}
-                      style={{
-                        width: `${Math.max(3, Math.round((durationMs / maxDurationMs) * 100))}%`,
-                      }}
-                    />
-                  </span>
-                  <span className="w-16 shrink-0 whitespace-nowrap text-right text-muted-foreground text-xs tabular-nums">
-                    {formatRunDuration(run.startedAt, run.completedAt) ?? ""}
-                  </span>
-                </DialogPrimitive.Trigger>
-              </li>
-            );
-          })}
+          {pageRuns.map((run) => (
+            <RunHistoryRow
+              key={run.id}
+              maxDurationMs={maxDurationMs}
+              onSelect={setSelectedRunId}
+              run={run}
+            />
+          ))}
         </ul>
-        {pageCount > 1 ? (
-          <nav
-            aria-label="Run history pages"
-            className="flex items-center justify-between text-muted-foreground text-xs"
-          >
-            <span className="tabular-nums">
-              {pageStart + 1}–{pageStart + pageRuns.length} of {runs.length}
-            </span>
-            <div className="flex gap-1">
-              <Button
-                disabled={currentPage === 0}
-                onClick={() => setPage(currentPage - 1)}
-                size="sm"
-                variant="ghost"
-              >
-                Previous
-              </Button>
-              <Button
-                disabled={currentPage >= pageCount - 1}
-                onClick={() => setPage(currentPage + 1)}
-                size="sm"
-                variant="ghost"
-              >
-                Next
-              </Button>
-            </div>
-          </nav>
-        ) : null}
+        <RunPagination
+          currentPage={currentPage}
+          onPageChange={setPage}
+          pageCount={pageCount}
+          pageSize={pageRuns.length}
+          pageStart={pageStart}
+          total={runs.length}
+        />
       </div>
       <DialogPrimitive.Portal>
         <DialogOverlay className="transition-opacity duration-200 ease-out data-closed:animate-none data-open:animate-none data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none" />
-        <DialogPrimitive.Popup className="fixed inset-y-0 right-0 z-50 flex w-full max-w-3xl translate-x-0 flex-col border-border border-l bg-background shadow-xl outline-none transition-transform duration-200 ease-out data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full motion-reduce:transition-none">
-          <div className="flex shrink-0 items-center gap-3 border-border border-b px-4 py-3">
-            {selectedRun ? <RunStatusIcon status={selectedRun.status} /> : null}
-            <DialogTitle className="min-w-0 flex-1 truncate text-sm">
-              {selectedRun
-                ? `${runStatusLabel(selectedRun.status)} · ${formatSessionTimestamp(selectedRun.startedAt)}`
-                : "Run conversation"}
-            </DialogTitle>
-            {selectedRun ? (
-              <Button
-                aria-label={
-                  copiedRunId === selectedRun.id
-                    ? "Copied run ID"
-                    : "Copy run ID"
-                }
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(selectedRun.id);
-                    setCopiedRunId(selectedRun.id);
-                  } catch {
-                    // Clipboard may be unavailable outside a secure context.
-                  }
-                }}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                {copiedRunId === selectedRun.id ? (
-                  <CheckmarkCircle01Icon aria-hidden className="size-4" />
-                ) : (
-                  <Copy01Icon aria-hidden className="size-4" />
-                )}
-              </Button>
-            ) : null}
-            {selectedRun?.status === "failed" ? (
-              <Button
-                disabled={busy || running}
-                onClick={onRerun}
-                size="sm"
-                variant="ghost"
-              >
-                Run again
-              </Button>
-            ) : null}
-            <DialogPrimitive.Close
-              render={
-                <Button
-                  aria-label="Close run conversation"
-                  size="icon-sm"
-                  variant="ghost"
-                />
-              }
-            >
-              <Cancel01Icon aria-hidden className="size-4" />
-            </DialogPrimitive.Close>
-          </div>
-          {selectedRun?.deliveryError ? (
-            <p className="px-4 py-2 text-destructive text-sm" role="alert">
-              {selectedRun.deliveryError}
-            </p>
-          ) : null}
-          {selectedRun ? (
-            <ChatMessageList
-              actionsDisabled
-              className="min-h-0 flex-1"
-              emptyMessage={
-                selectedRun.status === "running"
-                  ? "Waiting for output…"
-                  : "No output returned."
-              }
-              key={selectedRun.id}
-              messages={automationRunMessages(selectedRun)}
-              profileId={profileId}
-              readOnly
-              streamActive={selectedRun.status === "running"}
-              turnStartedAt={selectedRun.startedAt}
-            />
-          ) : null}
-        </DialogPrimitive.Popup>
+        <RunDetailPopup
+          busy={busy}
+          onRerun={onRerun}
+          profileId={profileId}
+          running={running}
+          selectedRun={selectedRun}
+        />
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
   );
