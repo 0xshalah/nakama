@@ -40,8 +40,30 @@ afterEach(async () => {
 
 test("an install with no config file reports nothing", async () => {
   expect(await loadErrorTrackingConfig()).toEqual({ dsn: null });
+  expect((await loadErrorTrackingSettingsPublic()).dashboardUrl).toBeNull();
   expect(await isErrorTrackingEnabled()).toBe(false);
 });
+
+test.each([
+  [DSN, "https://errors.example.com/"],
+  [
+    "http://key:secret@localhost:8000/errors/7?token=private#secret",
+    "http://localhost:8000/errors/",
+  ],
+  ["https://key@o123.ingest.sentry.io/7", "https://sentry.io/"],
+  ["https://key@o123.ingest.de.sentry.io/7", "https://sentry.io/"],
+  ["https://key@sentry.io.evil.example/7", "https://sentry.io.evil.example/"],
+  ["javascript:alert(1)", null],
+  ["not-a-dsn", null],
+])(
+  "dashboard address for %s omits ingest credentials",
+  async (dsn, dashboardUrl) => {
+    await saveErrorTrackingDsn(dsn);
+    expect((await loadErrorTrackingSettingsPublic()).dashboardUrl).toBe(
+      dashboardUrl
+    );
+  }
+);
 
 test("a saved DSN round trips and enables reporting", async () => {
   await saveErrorTrackingDsn(DSN);

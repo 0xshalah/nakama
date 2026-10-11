@@ -131,22 +131,6 @@ function AutomationSummaryCard({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-border border-t bg-muted/30 px-5 py-3">
-          <p className="mr-auto text-muted-foreground text-sm">
-            Done by{" "}
-            <span className="font-medium text-foreground">
-              {selectedProfileName}
-            </span>
-          </p>
-          <Button
-            className="px-3.5 text-destructive hover:text-destructive"
-            disabled={busy}
-            onClick={() => setDeleteTarget(selected)}
-            size="lg"
-            type="button"
-            variant="ghost"
-          >
-            Delete
-          </Button>
           <Button
             className="px-3.5"
             disabled={busy}
@@ -169,6 +153,24 @@ function AutomationSummaryCard({
             ) : null}
             Run now
           </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <p className="text-muted-foreground text-sm">
+              Done by{" "}
+              <span className="font-medium text-foreground">
+                {selectedProfileName}
+              </span>
+            </p>
+            <Button
+              className="px-3.5 text-destructive hover:text-destructive"
+              disabled={busy}
+              onClick={() => setDeleteTarget(selected)}
+              size="lg"
+              type="button"
+              variant="ghost"
+            >
+              Delete
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

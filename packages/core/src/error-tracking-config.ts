@@ -138,9 +138,35 @@ export async function isErrorTrackingEnabled(): Promise<boolean> {
 
 export interface ErrorTrackingSettingsPublic {
   configured: boolean;
+  dashboardUrl: string | null;
   dsnMasked: string | null;
   lastTest: ErrorTrackingTestResult | null;
   savedAt: string | null;
+}
+
+function getDashboardUrl(dsn: string | null): string | null {
+  if (!dsn) {
+    return null;
+  }
+
+  try {
+    const url = new URL(dsn);
+
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      return null;
+    }
+
+    if (url.hostname === "sentry.io" || url.hostname.endsWith(".sentry.io")) {
+      return "https://sentry.io/";
+    }
+
+    // shortcut: assumes dashboard and ingest share a host; add an explicit URL if they differ.
+    const prefix = url.pathname.split("/").filter(Boolean).slice(0, -1);
+
+    return `${url.origin}/${prefix.length ? `${prefix.join("/")}/` : ""}`;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -152,6 +178,7 @@ export async function loadErrorTrackingSettingsPublic(): Promise<ErrorTrackingSe
 
   return {
     configured: Boolean(dsn),
+    dashboardUrl: getDashboardUrl(dsn),
     dsnMasked: dsn ? maskTrailingSecret(dsn) : null,
     lastTest: lastTest ?? null,
     savedAt: savedAt ?? null,

@@ -1,7 +1,6 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import type {
   AutomationDelivery,
-  AutomationDeliveryChannel,
   AutomationRunRecord,
   AutomationRunStatus,
   ProfileSummary,
@@ -9,8 +8,15 @@ import type {
 } from "@nakama/core/contract";
 import { MAX_SESSION_SEARCH_LENGTH } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
+import { Command, CommandItem, CommandList } from "@nakama/ui/command";
 import { DialogOverlay, DialogTitle } from "@nakama/ui/dialog";
 import { Input } from "@nakama/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverHeader,
+  PopoverTrigger,
+} from "@nakama/ui/popover";
 import {
   Select,
   SelectContent,
@@ -22,6 +28,7 @@ import { Spinner } from "@nakama/ui/spinner";
 import { Textarea } from "@nakama/ui/textarea";
 import { cn } from "@nakama/ui/utils";
 import {
+  ArrowDown01Icon,
   ArrowRight01Icon,
   BotIcon,
   Cancel01Icon,
@@ -36,6 +43,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { TimezoneSelect } from "@/components/TimezoneSelect";
+import { useUserTimezone } from "@/hooks/use-timezones";
 import {
   formatFutureRelativeTime,
   formatSessionRelativeTime,
@@ -45,7 +53,10 @@ import {
   automationRunMessages,
   formatRunDuration,
   groupRunsByDay,
+  previewAutomationSchedule,
+  readSchedulePreset,
   runPreviewText,
+  schedulePresetTrigger,
   summarizeAutomationListMeta,
 } from "@/pages/automations/automations-page.shared";
 
@@ -202,6 +213,26 @@ export function AutomationSearch({
   );
 }
 
+const TIME_OPTIONS = Array.from({ length: 96 }, (_, index) => {
+  const hour = Math.floor(index / 4);
+  const minute = String((index % 4) * 15).padStart(2, "0");
+
+  return {
+    label: `${hour % 12 || 12}:${minute}${hour < 12 ? "am" : "pm"}`,
+    value: `${String(hour).padStart(2, "0")}:${minute}`,
+  };
+});
+
+const WEEKDAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
 export function AutomationEditorForm({
   automation,
   busy,
@@ -216,19 +247,18 @@ export function AutomationEditorForm({
   const scheduleTrigger =
     automation.trigger.type === "schedule" ? automation.trigger : null;
 
-  const isSchedule = scheduleTrigger !== null;
-
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-6">
       <Field label="Name">
         <Input
+          aria-label="Name"
+          className="h-auto rounded-none border-transparent px-0 py-1 font-semibold text-xl shadow-none md:text-xl"
           disabled={busy}
           onChange={(event) => onChange({ name: event.target.value })}
           value={automation.name}
         />
       </Field>
-
-      <Field label="Profile">
+      <Field label="Assistant">
         <Select
           disabled={busy}
           onValueChange={(value) => {
@@ -260,142 +290,399 @@ export function AutomationEditorForm({
           </SelectContent>
         </Select>
       </Field>
-
-      <Field label="Description">
-        <Input
-          disabled={busy}
-          onChange={(event) => onChange({ description: event.target.value })}
-          value={automation.description}
-        />
-      </Field>
-
-      <Field label="Prompt">
+      <Field label="What should it do?">
         <Textarea
-          className="min-h-32"
+          aria-label="What should it do?"
+          className="min-h-24 resize-y rounded-xl p-3 text-sm leading-relaxed"
           disabled={busy}
           onChange={(event) => onChange({ prompt: event.target.value })}
           value={automation.prompt}
         />
       </Field>
-
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Trigger">
-          <Select
-            disabled={busy}
-            onValueChange={(value) => {
-              const type = String(value);
-
-              if (type === "manual") {
-                onChange({ trigger: { type: "manual" } });
-
-                return;
-              }
-
-              onChange({
-                trigger: {
-                  cron: scheduleTrigger?.cron ?? "0 8 * * *",
-                  timezone: scheduleTrigger?.timezone,
-                  type: "schedule",
-                },
-              });
-            }}
-            value={automation.trigger.type}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="manual">Manual</SelectItem>
-              <SelectItem value="schedule">Schedule</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-
-        <Field label="Enabled">
-          <label className="flex h-8 items-center gap-2 text-foreground text-sm">
-            <input
-              checked={automation.enabled}
-              className="size-4 rounded border-input"
-              disabled={busy}
-              onChange={(event) => onChange({ enabled: event.target.checked })}
-              type="checkbox"
-            />
-            Run on schedule
-          </label>
-        </Field>
-      </div>
-
-      {isSchedule ? (
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Cron">
-            <Input
-              disabled={busy}
-              onChange={(event) =>
-                onChange({
-                  trigger: {
-                    cron: event.target.value,
-                    timezone: scheduleTrigger.timezone,
-                    type: "schedule",
-                  },
-                })
-              }
-              value={scheduleTrigger.cron}
-            />
-          </Field>
-          <Field label="Timezone">
-            <TimezoneSelect
-              allowAccountDefault
-              disabled={busy}
-              onValueChange={(timezone) =>
-                onChange({
-                  trigger: {
-                    cron: scheduleTrigger.cron,
-                    timezone,
-                    type: "schedule",
-                  },
-                })
-              }
-              value={scheduleTrigger.timezone}
-            />
-          </Field>
-        </div>
-      ) : null}
-
+      <AutomationScheduleFields
+        automation={automation}
+        busy={busy}
+        onChange={onChange}
+      />
       <DeliverySettingsFields
         busy={busy}
         delivery={automation.delivery}
         onChange={(delivery) => onChange({ delivery })}
       />
+      <details className="group border-border border-t pt-3">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 font-semibold sm:min-h-10 [&::-webkit-details-marker]:hidden">
+          More options
+          <ArrowDown01Icon
+            aria-hidden
+            className="size-4 text-muted-foreground transition-transform group-open:rotate-180"
+          />
+        </summary>
+        <div className="grid gap-4 pt-3">
+          <Field label="Notes">
+            <Input
+              disabled={busy}
+              onChange={(event) =>
+                onChange({ description: event.target.value })
+              }
+              value={automation.description}
+            />
+          </Field>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <MetaRow
-          hint={
-            automation.nextRunAt
-              ? formatSessionTimestamp(automation.nextRunAt)
-              : undefined
-          }
-          label="Next run"
-          value={
-            automation.nextRunAt
-              ? formatFutureRelativeTime(automation.nextRunAt)
-              : "Not scheduled"
-          }
-        />
-        <MetaRow
-          hint={
-            automation.lastRunAt
-              ? formatSessionTimestamp(automation.lastRunAt)
-              : undefined
-          }
-          label="Last run"
-          value={
-            automation.lastRunAt
-              ? formatSessionRelativeTime(automation.lastRunAt)
-              : "Never run"
-          }
-        />
-      </div>
+          {scheduleTrigger ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Advanced schedule">
+                <Input
+                  disabled={busy}
+                  onChange={(event) =>
+                    onChange({
+                      trigger: {
+                        cron: event.target.value,
+                        timezone: scheduleTrigger.timezone,
+                        type: "schedule",
+                      },
+                    })
+                  }
+                  value={scheduleTrigger.cron}
+                />
+              </Field>
+              <Field label="Timezone">
+                <TimezoneSelect
+                  allowAccountDefault
+                  disabled={busy}
+                  onValueChange={(timezone) =>
+                    onChange({
+                      trigger: {
+                        cron: scheduleTrigger.cron,
+                        timezone,
+                        type: "schedule",
+                      },
+                    })
+                  }
+                  value={scheduleTrigger.timezone}
+                />
+              </Field>
+            </div>
+          ) : null}
+          <div>
+            {automation.delivery ? (
+              <Field label="Notify on">
+                <Select
+                  disabled={busy}
+                  onValueChange={(value) => {
+                    const notifyValues: NonNullable<
+                      AutomationDelivery["notifyOn"]
+                    >[] = ["success", "failure", "both"];
+
+                    const notifyOn = notifyValues.find(
+                      (notifyValue) => notifyValue === String(value)
+                    );
+
+                    if (notifyOn && automation.delivery) {
+                      onChange({
+                        delivery: { ...automation.delivery, notifyOn },
+                      });
+                    }
+                  }}
+                  value={automation.delivery.notifyOn ?? "success"}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="success">Successful runs</SelectItem>
+                    <SelectItem value="failure">Failed runs</SelectItem>
+                    <SelectItem value="both">Success and failure</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            ) : null}
+          </div>
+        </div>
+      </details>
     </div>
+  );
+}
+
+function AutomationScheduleFields({
+  automation,
+  busy,
+  onChange,
+}: {
+  automation: StoredAutomation;
+  busy: boolean;
+  onChange: (patch: Partial<StoredAutomation>) => void;
+}) {
+  const scheduleTrigger =
+    automation.trigger.type === "schedule" ? automation.trigger : null;
+
+  const preset = readSchedulePreset(automation.trigger);
+
+  const frequency =
+    automation.trigger.type === "manual"
+      ? "manual"
+      : (preset?.frequency ?? "custom");
+
+  return (
+    <>
+      <fieldset className="min-w-0 space-y-3">
+        <legend className="mb-2 font-semibold text-sm">How often?</legend>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ["manual", "Only when I ask"],
+              ["daily", "Every day"],
+              ["weekdays", "Weekdays"],
+              ["weekly", "Weekly"],
+              ["monthly", "Monthly"],
+            ] as const
+          ).map(([value, label]) => (
+            <Button
+              aria-pressed={frequency === value}
+              className="h-auto min-h-11 rounded-full px-3 py-2 aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-primary sm:min-h-10"
+              disabled={busy}
+              key={value}
+              onClick={() =>
+                onChange({
+                  trigger: schedulePresetTrigger(value, automation.trigger),
+                })
+              }
+              type="button"
+              variant="outline"
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+        {preset?.frequency === "weekly" && scheduleTrigger ? (
+          <Field label="On">
+            <Select
+              disabled={busy}
+              onValueChange={(value) =>
+                onChange({
+                  trigger: {
+                    ...scheduleTrigger,
+                    cron: `${preset.minute} ${preset.hour} * * ${value}`,
+                  },
+                })
+              }
+              value={preset.weekday}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue>{WEEKDAYS[Number(preset.weekday)]}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {WEEKDAYS.map((day, index) => (
+                  <SelectItem key={day} value={String(index)}>
+                    {day}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        ) : null}
+        {preset?.frequency === "monthly" && scheduleTrigger ? (
+          <Field label="Day of the month">
+            <Select
+              disabled={busy}
+              onValueChange={(value) =>
+                onChange({
+                  trigger: {
+                    ...scheduleTrigger,
+                    cron: `${preset.minute} ${preset.hour} ${value} * *`,
+                  },
+                })
+              }
+              value={preset.day}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue>{preset.day}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 31 }, (_, index) => (
+                  <SelectItem key={index + 1} value={String(index + 1)}>
+                    {index + 1}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        ) : null}
+        {frequency === "custom" ? (
+          <p className="text-muted-foreground text-sm">
+            {automation.trigger.type === "runAt"
+              ? `Once, ${automation.trigger.at}`
+              : `Custom schedule: ${scheduleTrigger?.cron}`}
+          </p>
+        ) : null}
+      </fieldset>
+      <AutomationTimeFields
+        automation={automation}
+        busy={busy}
+        onChange={onChange}
+      />
+      <AutomationNextRun automation={automation} />
+    </>
+  );
+}
+
+function AutomationNextRun({ automation }: { automation: StoredAutomation }) {
+  const { data: userTimezone, isError } = useUserTimezone();
+
+  if (automation.trigger.type === "manual") {
+    return null;
+  }
+
+  const timezone = automation.trigger.timezone ?? userTimezone;
+  let label = "Turned off";
+
+  if (automation.enabled) {
+    label = isError ? "Time zone unavailable" : "Loading time zone…";
+
+    if (timezone) {
+      label =
+        previewAutomationSchedule(automation.trigger, timezone) ??
+        "No upcoming run";
+    }
+  }
+
+  return (
+    <p
+      aria-live="polite"
+      className="rounded-xl bg-muted/40 px-3 py-3 text-muted-foreground text-sm"
+    >
+      Next run: <span className="font-semibold text-foreground">{label}</span>
+    </p>
+  );
+}
+
+function AutomationTimeFields({
+  automation,
+  busy,
+  onChange,
+}: {
+  automation: StoredAutomation;
+  busy: boolean;
+  onChange: (patch: Partial<StoredAutomation>) => void;
+}) {
+  const preset = readSchedulePreset(automation.trigger);
+
+  const scheduleTrigger =
+    automation.trigger.type === "schedule" ? automation.trigger : null;
+
+  const [pickingTime, setPickingTime] = useState(false);
+
+  const timeValue = preset
+    ? `${preset.hour.padStart(2, "0")}:${preset.minute.padStart(2, "0")}`
+    : "";
+
+  const customTime = preset && !["07:00", "12:00", "18:00"].includes(timeValue);
+
+  function changeTime(value: string) {
+    if (!(value && preset && scheduleTrigger)) {
+      return;
+    }
+
+    const [hour, minute] = value.split(":");
+
+    onChange({
+      trigger: {
+        ...scheduleTrigger,
+        cron: `${Number(minute)} ${Number(hour)} ${preset.day} * ${preset.weekday}`,
+      },
+    });
+  }
+
+  return (
+    <>
+      {preset ? (
+        <fieldset className="min-w-0">
+          <legend className="mb-2 font-semibold text-sm">What time?</legend>
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                ["07:00", "Morning", "7:00 AM"],
+                ["12:00", "Midday", "12:00 PM"],
+                ["18:00", "Evening", "6:00 PM"],
+              ] as const
+            ).map(([value, label, time]) => (
+              <Button
+                aria-label={label}
+                aria-pressed={!customTime && timeValue === value}
+                className="h-auto min-h-14 flex-col items-start gap-0 rounded-xl px-3 py-2 text-left aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-primary"
+                disabled={busy}
+                key={value}
+                onClick={() => {
+                  setPickingTime(false);
+                  changeTime(value);
+                }}
+                type="button"
+                variant="outline"
+              >
+                <span>{label}</span>
+                <span className="font-normal text-muted-foreground">
+                  {time}
+                </span>
+              </Button>
+            ))}
+            <Popover onOpenChange={setPickingTime} open={pickingTime}>
+              <PopoverTrigger
+                render={
+                  <Button
+                    aria-label="Pick a time"
+                    aria-pressed={Boolean(customTime)}
+                    className="h-auto min-h-14 flex-col items-start gap-0 rounded-xl border-dashed px-3 py-2 text-left aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:ring-1 aria-pressed:ring-primary"
+                    disabled={busy}
+                    type="button"
+                    variant="outline"
+                  />
+                }
+              >
+                <span>Pick a time</span>
+                <span className="font-normal text-muted-foreground">
+                  {customTime ? timeValue : "Any time of day"}
+                </span>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="min-w-48 rounded-2xl p-4">
+                <PopoverHeader title="Pick a time" />
+                <Input
+                  aria-label="Run time"
+                  className="h-11 rounded-xl tabular-nums"
+                  disabled={busy}
+                  onChange={(event) => changeTime(event.target.value)}
+                  type="time"
+                  value={timeValue}
+                />
+                <Command
+                  aria-label="Time options"
+                  className="mt-3 h-auto rounded-none! p-0"
+                  defaultValue={timeValue}
+                  shouldFilter={false}
+                  tabIndex={0}
+                >
+                  <CommandList aria-label="Time options" className="max-h-60">
+                    {TIME_OPTIONS.map((option) => (
+                      <CommandItem
+                        className="min-h-10 rounded-none px-3 tabular-nums"
+                        data-checked={option.value === timeValue}
+                        disabled={busy}
+                        key={option.value}
+                        onSelect={() => {
+                          changeTime(option.value);
+                          setPickingTime(false);
+                        }}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </CommandItem>
+                    ))}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+        </fieldset>
+      ) : null}
+    </>
   );
 }
 
@@ -702,96 +989,64 @@ function DeliverySettingsFields({
   const channel = delivery?.channel ?? "none";
 
   return (
-    <fieldset className="grid min-w-0 gap-4 rounded-2xl border border-border/70 bg-muted/20 p-4">
-      <legend className="sr-only">Delivery</legend>
-      <div className={delivery ? "grid gap-4 sm:grid-cols-2" : undefined}>
-        <Field label="Send results to">
-          <Select
-            disabled={busy}
-            onValueChange={(value) => {
-              const next = String(value);
-
-              if (next === "none") {
-                onChange(undefined);
-
-                return;
-              }
-
-              const channels: AutomationDeliveryChannel[] = [
-                "telegram",
-                "whatsapp",
-                "email",
-                "discord",
-              ];
-
-              const nextChannel = channels.find((channel) => channel === next);
-
-              if (!nextChannel) {
-                return;
-              }
-
-              const nextDelivery: AutomationDelivery = { channel: nextChannel };
-
-              if (next === "email" && delivery?.to) {
-                nextDelivery.to = delivery.to;
-              }
-
-              if (next === "discord" && delivery?.channelId) {
-                nextDelivery.channelId = delivery.channelId;
-              }
-
-              if (delivery?.notifyOn) {
-                nextDelivery.notifyOn = delivery.notifyOn;
-              }
-
-              onChange(nextDelivery);
-            }}
-            value={channel}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None (run history only)</SelectItem>
-              <SelectItem value="telegram">Telegram</SelectItem>
-              <SelectItem value="whatsapp">WhatsApp</SelectItem>
-              <SelectItem value="email">Email</SelectItem>
-              <SelectItem value="discord">Discord</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-
-        {delivery ? (
-          <Field label="Notify on">
-            <Select
+    <fieldset className="grid min-w-0 gap-2">
+      <legend className="mb-2 font-semibold text-sm">
+        Send me the result on
+      </legend>
+      <div className="grid grid-cols-3 gap-2">
+        {(["none", "telegram", "whatsapp", "email", "discord"] as const).map(
+          (value) => (
+            <Button
+              aria-pressed={channel === value}
+              className="min-h-11 rounded-xl aria-pressed:border-primary aria-pressed:bg-primary/5 aria-pressed:text-foreground aria-pressed:ring-1 aria-pressed:ring-primary sm:min-h-10"
               disabled={busy}
-              onValueChange={(value) => {
-                const notifyValues: NonNullable<
-                  AutomationDelivery["notifyOn"]
-                >[] = ["success", "failure", "both"];
-
-                const notifyOn = notifyValues.find(
-                  (notifyValue) => notifyValue === String(value)
-                );
-
-                if (notifyOn) {
-                  onChange({ ...delivery, notifyOn });
+              key={value}
+              onClick={() => {
+                if (value === channel) {
+                  return;
                 }
+
+                if (value === "none") {
+                  onChange(undefined);
+
+                  return;
+                }
+
+                const nextDelivery: AutomationDelivery = { channel: value };
+
+                if (value === "email" && delivery?.to) {
+                  nextDelivery.to = delivery.to;
+                }
+
+                if (value === "discord" && delivery?.channelId) {
+                  nextDelivery.channelId = delivery.channelId;
+                }
+
+                if (delivery?.notifyOn) {
+                  nextDelivery.notifyOn = delivery.notifyOn;
+                }
+
+                onChange(nextDelivery);
               }}
-              value={delivery.notifyOn ?? "success"}
+              type="button"
+              variant="outline"
             >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="success">Successful runs</SelectItem>
-                <SelectItem value="failure">Failed runs</SelectItem>
-                <SelectItem value="both">Success and failure</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        ) : null}
+              {
+                {
+                  discord: "Discord",
+                  email: "Email",
+                  none: "Nowhere",
+                  telegram: "Telegram",
+                  whatsapp: "WhatsApp",
+                }[value]
+              }
+            </Button>
+          )
+        )}
       </div>
+      <p className="text-muted-foreground text-sm">
+        Results always stay in the run history.
+      </p>
 
       {delivery?.channel === "discord" ? (
         <Field
@@ -867,36 +1122,15 @@ function Field({
   children: ReactNode;
 }) {
   return (
-    <div className="min-w-0">
-      <p className="mb-2 block font-medium text-muted-foreground text-xs">
-        {label}
-      </p>
+    <label className="block min-w-0">
+      <span className="mb-1.5 block font-medium text-sm">{label}</span>
       {children}
       {hint ? (
         <p className="mt-1.5 text-pretty text-muted-foreground text-xs leading-relaxed">
           {hint}
         </p>
       ) : null}
-    </div>
-  );
-}
-
-function MetaRow({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-}) {
-  return (
-    <div>
-      <p className="font-medium text-muted-foreground text-xs">{label}</p>
-      <p className="mt-1 text-foreground text-sm" title={hint}>
-        {value}
-      </p>
-    </div>
+    </label>
   );
 }
 

@@ -3,6 +3,7 @@ import type {
   AutomationTrigger,
   StoredAutomation,
 } from "@nakama/core/contract";
+import { Cron } from "croner";
 import { type ChatListItem, chatMessagesToListItems } from "@/lib/chat-history";
 
 export function automationRunMessages(
@@ -238,4 +239,130 @@ export function formatRunDuration(
   const remainder = seconds % 60;
 
   return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
+}
+
+export function readSchedulePreset(trigger: AutomationTrigger) {
+  if (trigger.type !== "schedule") {
+    return null;
+  }
+
+  const match =
+    /^(\d|[0-5]\d) (\d|1\d|2[0-3]) (\*|[1-9]|[12]\d|3[01]) \* (\*|1-5|[0-6])$/.exec(
+      trigger.cron.trim()
+    );
+
+  if (!match) {
+    return null;
+  }
+
+  const [, minute, hour, day, weekday] = match;
+
+  if (day !== "*" && weekday !== "*") {
+    return null;
+  }
+
+  return {
+    day,
+    frequency:
+      day === "*"
+        ? weekday === "*"
+          ? "daily"
+          : weekday === "1-5"
+            ? "weekdays"
+            : "weekly"
+        : "monthly",
+    hour,
+    minute,
+    weekday,
+  };
+}
+
+export function schedulePresetTrigger(
+  frequency: string,
+  trigger: AutomationTrigger
+): AutomationTrigger {
+  if (frequency === "manual") {
+    return { type: "manual" };
+  }
+
+  const preset = readSchedulePreset(trigger);
+
+  const day =
+    frequency === "monthly"
+      ? preset?.frequency === "monthly"
+        ? preset.day
+        : "1"
+      : "*";
+
+  const weekday =
+    frequency === "weekdays"
+      ? "1-5"
+      : frequency === "weekly"
+        ? preset?.frequency === "weekly"
+          ? preset.weekday
+          : "1"
+        : "*";
+
+  return {
+    cron: `${preset?.minute ?? "0"} ${preset?.hour ?? "7"} ${day} * ${weekday}`,
+    timezone: trigger.type === "manual" ? undefined : trigger.timezone,
+    type: "schedule",
+  };
+}
+
+export function previewAutomationSchedule(
+  trigger: AutomationTrigger,
+  timezone: string,
+  now = new Date()
+): string | null {
+  if (trigger.type === "manual") {
+    return null;
+  }
+
+  try {
+    const next =
+      trigger.type === "runAt"
+        ? new Date(trigger.at)
+        : new Cron(trigger.cron, { paused: true, timezone }).nextRun(now);
+
+    if (!(next && Number.isFinite(next.getTime())) || next <= now) {
+      return null;
+    }
+
+    const dateFormat = new Intl.DateTimeFormat("en-US", {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone: timezone,
+      year: "numeric",
+    });
+
+    const localNow = new Date(dateFormat.format(now));
+    const localNext = new Date(dateFormat.format(next));
+
+    const dayDifference = Math.round(
+      (localNext.getTime() - localNow.getTime()) / 86_400_000
+    );
+
+    const day =
+      dayDifference === 0
+        ? "Today"
+        : dayDifference === 1
+          ? "Tomorrow"
+          : next.toLocaleDateString("en-US", {
+              day: "numeric",
+              month: "short",
+              timeZone: timezone,
+              weekday: "short",
+            });
+
+    const time = next.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: timezone,
+    });
+
+    return `${day}, ${time}`;
+  } catch {
+    return null;
+  }
 }

@@ -1732,6 +1732,7 @@ export interface UpdateComposioSettingsRequest {
 
 export interface ErrorTrackingSettingsResponse {
   configured: boolean;
+  dashboardUrl?: string | null;
   dsnMasked: string | null;
   /** Cleared when the DSN changes. */
   lastTest: { at: string; delivered: boolean } | null;

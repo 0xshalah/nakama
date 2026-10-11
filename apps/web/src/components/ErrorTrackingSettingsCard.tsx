@@ -7,9 +7,11 @@ import {
   InputGroupInput,
 } from "@nakama/ui/input-group";
 import { Spinner } from "@nakama/ui/spinner";
+import { Switch } from "@nakama/ui/switch";
 import {
   Alert02Icon,
   Link01Icon,
+  LinkSquare02Icon,
   RefreshIcon,
   ViewIcon,
   ViewOffIcon,
@@ -123,17 +125,20 @@ export function ErrorTrackingSettingsCard() {
             <DsnSummary
               dsnMasked={settings?.dsnMasked}
               onReplace={() => setReplacing(true)}
-              onTest={() => void handleTest()}
               onTurnOff={() => void save("")}
               saving={saveMutation.isPending}
-              testFailed={testFailed}
-              testing={testMutation.isPending}
-              testingLabel={sendTestLabel}
             />
             <DsnDetails
               lastTest={lastTest}
               savedAt={settings?.savedAt}
               testFailed={testFailed}
+            />
+            <DsnActions
+              dashboardUrl={settings?.dashboardUrl}
+              onTest={() => void handleTest()}
+              testFailed={testFailed}
+              testing={testMutation.isPending}
+              testingLabel={sendTestLabel}
             />
           </>
         )}
@@ -144,22 +149,24 @@ export function ErrorTrackingSettingsCard() {
           </p>
         ) : null}
 
-        <div className="border-border border-t px-5 py-3">
-          <a
-            className="inline-flex items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground"
-            href="https://docs.sentry.io/concepts/key-terms/dsn-explainer/"
-            rel="noreferrer"
-            target="_blank"
-          >
-            <Link01Icon aria-hidden className="size-3.5 shrink-0" />
-            <span>
-              Find your DSN:{" "}
-              <span className="font-medium text-primary">
-                Project Settings → Client Keys
+        {editing ? (
+          <div className="border-border border-t px-5 py-3">
+            <a
+              className="inline-flex items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground"
+              href="https://docs.sentry.io/concepts/key-terms/dsn-explainer/"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <Link01Icon aria-hidden className="size-3.5 shrink-0" />
+              <span>
+                Find your DSN:{" "}
+                <span className="font-medium text-primary">
+                  Project Settings → Client Keys
+                </span>
               </span>
-            </span>
-          </a>
-        </div>
+            </a>
+          </div>
+        ) : null}
       </IntegrationCardShell>
     </div>
   );
@@ -297,64 +304,97 @@ function DsnEditor({
 function DsnSummary({
   dsnMasked,
   onReplace,
-  onTest,
   onTurnOff,
   saving,
-  testFailed,
-  testing,
-  testingLabel,
 }: {
   dsnMasked: string | null | undefined;
   onReplace: () => void;
-  onTest: () => void;
   onTurnOff: () => void;
   saving: boolean;
-  testFailed: boolean;
-  testing: boolean;
-  testingLabel: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-4 p-5">
-      <div className="min-w-0 flex-[1_1_16rem] space-y-1">
+    <div className="space-y-2 p-5">
+      <div className="flex items-center justify-between gap-4">
         <p className="text-muted-foreground text-sm">Sentry-compatible DSN</p>
-        <p className="truncate font-mono text-foreground text-sm">
+        <div className="flex items-center gap-2 text-foreground text-sm">
+          {saving ? <Spinner className="size-4" /> : null}
+          <span>On</span>
+          <Switch
+            aria-label="Error tracking"
+            checked
+            disabled={saving}
+            onCheckedChange={(next) => {
+              if (!next) {
+                onTurnOff();
+              }
+            }}
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 py-1.5 pr-1.5 pl-4">
+        <p className="min-w-0 flex-1 truncate font-mono text-foreground text-sm">
           {dsnMasked}
         </p>
-      </div>
-      <div className="flex flex-wrap gap-2">
         <Button
           className="shrink-0"
           onClick={onReplace}
           size="sm"
           type="button"
+          variant="outline"
         >
           Replace DSN
         </Button>
-        {/* Without this the only way to learn the DSN is wrong is to wait
-            for a real crash. The failure banner carries its own retry. */}
-        {testFailed ? null : (
-          <Button
-            className="shrink-0"
-            disabled={testing}
-            onClick={onTest}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {testingLabel ?? "Send test event"}
-          </Button>
-        )}
+      </div>
+      <a
+        className="inline-block text-muted-foreground text-sm transition-colors hover:text-foreground"
+        href="https://docs.sentry.io/concepts/key-terms/dsn-explainer/"
+        rel="noreferrer"
+        target="_blank"
+      >
+        Find it in{" "}
+        <span className="font-medium text-primary">
+          Project Settings → Client Keys
+        </span>
+      </a>
+    </div>
+  );
+}
+
+function DsnActions({
+  dashboardUrl,
+  onTest,
+  testFailed,
+  testing,
+  testingLabel,
+}: {
+  dashboardUrl: string | null | undefined;
+  onTest: () => void;
+  testFailed: boolean;
+  testing: boolean;
+  testingLabel: ReactNode;
+}) {
+  // The failure banner carries its own retry, so the test button hides then.
+  if (testFailed && !dashboardUrl) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2 px-5 pb-5">
+      {testFailed ? null : (
+        <Button disabled={testing} onClick={onTest} type="button">
+          {testingLabel ?? "Send test event"}
+        </Button>
+      )}
+      {dashboardUrl ? (
         <Button
-          className="shrink-0"
-          disabled={saving}
-          onClick={onTurnOff}
-          size="sm"
-          type="button"
+          nativeButton={false}
+          render={<a href={dashboardUrl} rel="noreferrer" target="_blank" />}
           variant="outline"
         >
-          {saving ? <Spinner className="size-4" /> : "Turn off"}
+          Open dashboard
+          <LinkSquare02Icon aria-hidden className="size-4" />
         </Button>
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -369,7 +409,7 @@ function DsnDetails({
   testFailed: boolean;
 }) {
   return (
-    <dl className="grid grid-cols-1 gap-4 border-border border-t px-5 py-4 text-sm sm:grid-cols-3">
+    <dl className="mx-5 grid grid-cols-1 gap-4 border-border border-t py-4 text-sm sm:grid-cols-3">
       <div className="space-y-1">
         <dt className="text-muted-foreground">Saved</dt>
         <dd className="text-foreground">
