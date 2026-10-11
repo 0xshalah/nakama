@@ -38,10 +38,6 @@ export function registerAutomationRoutes(
       .openapi({ param: { in: "path", name: "automationId" } }),
   });
 
-  const automationRunParam = automationIdParam.extend({
-    runId: z.string().openapi({ param: { in: "path", name: "runId" } }),
-  });
-
   const draftAutomationSchema = z
     .object({ channel: z.enum(AGENT_CHANNELS), prompt: z.string() })
     .passthrough()
@@ -370,27 +366,6 @@ export function registerAutomationRoutes(
       tags: ["Automations"],
     })
   );
-  app.openAPIRegistry.registerPath(
-    createRoute({
-      method: "delete",
-      operationId: "deleteAutomationRun",
-      path: "/v1/automations/{automationId}/runs/{runId}",
-      request: { params: automationRunParam },
-      responses: {
-        204: { description: "Automation run deleted" },
-        404: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-        500: {
-          content: { "application/json": { schema: errorSchema } },
-          description: "Error",
-        },
-      },
-      summary: "Delete an automation run history item",
-      tags: ["Automations"],
-    })
-  );
 
   app.post("/v1/automations/draft", async (c) => {
     requireNotViewerFromContext(c);
@@ -552,33 +527,6 @@ export function registerAutomationRoutes(
       );
 
       return json<ListAutomationRunsResponse>({ runs });
-    } catch (error) {
-      if (error instanceof Error && error.message === "Automation not found.") {
-        return errorResponse(error.message, 404);
-      }
-
-      throw error;
-    }
-  });
-
-  app.delete("/v1/automations/:automationId/runs/:runId", async (c) => {
-    requireNotViewerFromContext(c);
-    const orgId = requireActiveOrgIdFromContext(c);
-    const automationId = decodeURIComponent(c.req.param("automationId"));
-    const runId = decodeURIComponent(c.req.param("runId"));
-
-    try {
-      const deleted = await automationService.deleteRun(
-        automationId,
-        runId,
-        orgId
-      );
-
-      if (!deleted) {
-        return errorResponse("Automation run not found.", 404);
-      }
-
-      return new Response(null, { status: 204 });
     } catch (error) {
       if (error instanceof Error && error.message === "Automation not found.") {
         return errorResponse(error.message, 404);

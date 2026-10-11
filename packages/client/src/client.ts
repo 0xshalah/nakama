@@ -2126,16 +2126,6 @@ export class NakamaClient {
     return response.runs;
   }
 
-  async deleteAutomationRun(
-    automationId: string,
-    runId: string
-  ): Promise<void> {
-    await this.request(
-      `/v1/automations/${encodeURIComponent(automationId)}/runs/${encodeURIComponent(runId)}`,
-      { method: "DELETE" }
-    );
-  }
-
   async markAutomationRunsRead(automationId: string): Promise<string> {
     const response = await this.request<MarkAutomationRunsReadResponse>(
       `/v1/automations/${encodeURIComponent(automationId)}/runs/mark-read`,

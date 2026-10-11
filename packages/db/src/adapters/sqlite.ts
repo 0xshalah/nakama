@@ -692,11 +692,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     WHERE id = ?
   `);
 
-  const deleteAutomationRunStmt = db.prepare(`
-    DELETE FROM automation_runs
-    WHERE automation_id = ? AND id = ?
-  `);
-
   const listWorkflowsForOrgStmt = db.prepare<WorkflowRow, SQLQueryBindings[]>(
     "SELECT * FROM workflows WHERE org_id = ? ORDER BY updated_at DESC"
   );
@@ -3970,12 +3965,6 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
     async deleteAutomation(id) {
       const result = deleteAutomationStmt.run(id);
-
-      return result.changes > 0;
-    },
-
-    async deleteAutomationRun(automationId, runId) {
-      const result = deleteAutomationRunStmt.run(automationId, runId);
 
       return result.changes > 0;
     },

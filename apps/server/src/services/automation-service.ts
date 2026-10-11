@@ -307,20 +307,6 @@ export class AutomationService {
     }
   }
 
-  async deleteRun(
-    automationId: string,
-    runId: string,
-    orgId: string
-  ): Promise<boolean> {
-    const automation = await this.get(automationId, orgId);
-
-    if (!automation) {
-      throw new Error("Automation not found.");
-    }
-
-    return this.db.deleteAutomationRun(automationId, runId);
-  }
-
   async markRunsRead(
     automationId: string,
     orgId: string,

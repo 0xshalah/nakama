@@ -25,7 +25,6 @@ type DetailState = Pick<
   | "selectedRunSummary"
   | "runs"
   | "runsLoading"
-  | "setDeleteRunTarget"
 >;
 
 function Fact({
@@ -190,7 +189,6 @@ export function AutomationDetailPanel(state: DetailState) {
     selectedRunSummary,
     runs,
     runsLoading,
-    setDeleteRunTarget,
   } = state;
 
   if (!selected) {
@@ -237,7 +235,6 @@ export function AutomationDetailPanel(state: DetailState) {
         ) : (
           <RunHistoryList
             busy={busy}
-            onDeleteRun={setDeleteRunTarget}
             onRerun={() => void handleRun(selected.id)}
             profileId={selected.profileId}
             running={runningId === selected.id}

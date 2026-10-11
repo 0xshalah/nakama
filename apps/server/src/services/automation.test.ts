@@ -462,55 +462,6 @@ describe("AutomationService", () => {
     expect(runsAfterRead[0]?.read).toBe(true);
   });
 
-  test("deletes a run history item", async () => {
-    const db = await createTestDb();
-
-    const service = new AutomationService(db, {
-      getUserTimezone: async () => "UTC",
-    });
-
-    const automation = await service.create(
-      ORG_ID,
-      {
-        description: "Daily digest",
-        name: "Digest",
-        prompt: "Summarize news",
-        trigger: { type: "manual" },
-      },
-      PROFILE_ID
-    );
-
-    await db.insertAutomationRun({
-      automationId: automation.id,
-      completedAt: "2026-06-29T10:01:00.000Z",
-      error: null,
-      id: "run_delete_me",
-      output: "Summary",
-      startedAt: "2026-06-29T10:00:00.000Z",
-      status: "completed",
-    });
-
-    await db.insertAutomationRun({
-      automationId: automation.id,
-      completedAt: "2026-06-29T11:01:00.000Z",
-      error: null,
-      id: "run_keep_me",
-      output: "Another summary",
-      startedAt: "2026-06-29T11:00:00.000Z",
-      status: "completed",
-    });
-
-    await expect(
-      service.deleteRun(automation.id, "run_delete_me", ORG_ID)
-    ).resolves.toBe(true);
-    await expect(
-      service.deleteRun(automation.id, "run_missing", ORG_ID)
-    ).resolves.toBe(false);
-
-    const runs = await service.listRuns(automation.id, ORG_ID);
-    expect(runs.map((run) => run.id)).toEqual(["run_keep_me"]);
-  });
-
   test("completes the exact claimed automation run", async () => {
     const db = await createTestDb();
 
@@ -871,9 +822,6 @@ describe("AutomationRunner", () => {
           role: "assistant",
         });
       }
-
-      await reloadedService.deleteRun(automation.id, reloaded.id, ORG_ID);
-      expect(await db.getAutomationRun(automation.id, reloaded.id)).toBeNull();
     }
   );
 

@@ -30,7 +30,6 @@ import { cn } from "@nakama/ui/utils";
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
-  BotIcon,
   Cancel01Icon,
   CancelCircleIcon,
   CheckmarkCircle01Icon,
@@ -52,7 +51,6 @@ import {
 import {
   automationRunMessages,
   formatRunDuration,
-  groupRunsByDay,
   previewAutomationSchedule,
   readSchedulePreset,
   runPreviewText,
@@ -732,18 +730,163 @@ export function AutomationDetailSkeleton() {
   );
 }
 
-export function AutomationsEmptyState() {
+const AUTOMATION_EXAMPLES = [
+  {
+    getLines: [
+      "Three emails need a reply today",
+      "Design review moved to 14:00",
+      "One invoice is waiting for approval",
+    ],
+    getTime: "Weekdays 8:30",
+    getTitle: "Today at a glance",
+    name: "Morning briefing",
+    prompt:
+      "Read my unread email and today's calendar. Tell me what needs a reply first.",
+    when: "Weekdays at 8:30",
+  },
+  {
+    getLines: [
+      "Merged: the new billing page and two fixes",
+      "Closed: the older login issues",
+      "Still open: the slow export",
+    ],
+    getTime: "Friday 16:00",
+    getTitle: "Report for this week",
+    name: "Weekly team report",
+    prompt:
+      "List the pull requests we merged and the issues we closed this week. Write a short report for the team.",
+    when: "Fridays at 16:00",
+  },
+  {
+    getLines: [
+      "Competitor A changed its pricing page",
+      "Competitor B announced a new integration",
+      "No news from Competitor C",
+    ],
+    getTime: "Monday 9:00",
+    getTitle: "What changed this week",
+    name: "Competitor watch",
+    prompt:
+      "Search the web for news about our main competitors. Send me only the changes that matter.",
+    when: "Mondays at 9:00",
+  },
+  {
+    getLines: [
+      "Two emails need a reply now",
+      "Five can wait until later",
+      "Eight are safe to ignore",
+    ],
+    getTime: "Every hour",
+    getTitle: "New email, sorted",
+    name: "Inbox triage",
+    prompt:
+      "Sort new email into reply, read later and ignore. Draft a reply for the urgent ones.",
+    when: "Every hour",
+  },
+  {
+    getLines: [
+      "Changelog is ready",
+      "Docs page is not updated yet",
+      "Tests pass on main",
+    ],
+    getTime: "When you run it",
+    getTitle: "Before you ship",
+    name: "Release checklist",
+    prompt:
+      "Go through the release checklist. Tell me what is missing before we ship.",
+    when: "Manual",
+  },
+];
+
+export function AutomationExample({
+  onUse,
+  onStartFromScratch,
+}: {
+  onUse: (draft: string) => void;
+  onStartFromScratch: () => void;
+}) {
+  const [index, setIndex] = useState(0);
+  const example = AUTOMATION_EXAMPLES[index];
+
   return (
-    <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 text-center">
-      <div className="flex size-12 items-center justify-center rounded-full border border-border bg-muted/40">
-        <BotIcon aria-hidden className="size-5 text-muted-foreground" />
+    <div className="flex w-full flex-col items-center gap-6">
+      <h2 className="font-semibold text-3xl text-foreground">
+        What could your agent do for you?
+      </h2>
+      <div className="flex flex-wrap justify-center gap-2">
+        {AUTOMATION_EXAMPLES.map((item, i) => (
+          <button
+            aria-pressed={i === index}
+            className={cn(
+              "rounded-full border px-3 py-1.5 text-sm transition-colors",
+              i === index
+                ? "border-foreground bg-foreground text-background"
+                : "border-border text-foreground/80 hover:bg-muted"
+            )}
+            key={item.name}
+            onClick={() => setIndex(i)}
+            type="button"
+          >
+            {item.name}
+          </button>
+        ))}
       </div>
-      <div className="space-y-1">
-        <p className="type-section-title">No automations yet</p>
-        <p className="type-body text-muted-foreground">
-          Ask the agent in Chat to create a scheduled or manual automation for
-          you.
-        </p>
+      <div className="flex w-full max-w-3xl flex-col items-stretch gap-3 lg:flex-row">
+        <div className="flex min-w-0 flex-1 basis-0 flex-col gap-3 rounded-xl border border-border bg-muted/30 p-5 text-left">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+              You set
+            </span>
+            <span className="rounded-full border border-border bg-background px-2.5 py-1 text-foreground/80 text-xs">
+              {example.when}
+            </span>
+          </div>
+          <p className="font-semibold text-base text-foreground">
+            {example.name}
+          </p>
+          <p className="text-foreground/80 text-sm leading-relaxed">
+            {example.prompt}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center justify-center">
+          <ArrowRight01Icon
+            aria-hidden
+            className="size-5 text-primary max-lg:rotate-90"
+          />
+        </div>
+        <div className="flex min-w-0 flex-1 basis-0 flex-col gap-3 rounded-xl border border-border bg-background p-5 text-left">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-medium text-primary text-xs uppercase tracking-wide">
+              You get
+            </span>
+            <span className="text-muted-foreground text-xs">
+              {example.getTime}
+            </span>
+          </div>
+          <p className="font-semibold text-base text-foreground">
+            {example.getTitle}
+          </p>
+          <ul className="list-disc space-y-2 pl-5 text-foreground/80 text-sm leading-relaxed marker:text-primary">
+            {example.getLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <div className="flex gap-3">
+        <Button
+          onClick={() =>
+            onUse(
+              `Create an automation. Run it: ${example.when}. ${example.prompt}`
+            )
+          }
+          type="button"
+        >
+          Use this example
+        </Button>
+        <Button onClick={onStartFromScratch} type="button" variant="outline">
+          Start from scratch
+        </Button>
       </div>
     </div>
   );
@@ -754,21 +897,34 @@ export function RunHistoryList({
   busy,
   running,
   profileId,
-  onDeleteRun,
   onRerun,
 }: {
   runs: AutomationRunRecord[];
   busy: boolean;
   running: boolean;
   profileId: string;
-  onDeleteRun: (run: AutomationRunRecord) => void;
   onRerun: () => void;
 }) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [copiedRunId, setCopiedRunId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const selectedRun = runs.find((run) => run.id === selectedRunId);
-  const groups = useMemo(() => groupRunsByDay(runs), [runs]);
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(runs.length / RUN_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageStart = currentPage * RUN_PAGE_SIZE;
+
+  const pageRuns = useMemo(
+    () => runs.slice(pageStart, pageStart + RUN_PAGE_SIZE),
+    [runs, pageStart]
+  );
+
+  const completedCount = runs.filter(
+    (run) => run.status === "completed"
+  ).length;
+
+  const failedCount = runs.filter((run) => run.status === "failed").length;
+  const maxDurationMs = Math.max(1, ...runs.map(runDurationMs));
 
   return (
     <DialogPrimitive.Root
@@ -781,78 +937,131 @@ export function RunHistoryList({
       open={open && Boolean(selectedRun)}
     >
       <div className="space-y-4">
-        {groups.map((group) => (
-          <section className="space-y-3" key={group.label}>
-            <p className="text-muted-foreground/55 text-xs">{group.label}</p>
-            <ul className="divide-y divide-border rounded-xl border border-border bg-card text-card-foreground">
-              {group.runs.map((run) => (
-                <li
-                  className="flex min-w-0 items-center gap-2 px-4 py-3"
-                  key={run.id}
+        <div
+          aria-label={`${completedCount} completed, ${failedCount} failed`}
+          className="flex gap-1"
+          role="img"
+        >
+          {runs.map((run) => (
+            <span
+              className={cn(
+                "h-2 min-w-0 flex-1 rounded-full",
+                run.status === "failed"
+                  ? "bg-destructive"
+                  : run.status === "completed"
+                    ? "bg-emerald-600 dark:bg-emerald-400"
+                    : "bg-muted-foreground/40"
+              )}
+              key={run.id}
+            />
+          ))}
+        </div>
+        <div className="flex gap-4 text-muted-foreground text-xs">
+          <span>{completedCount} completed</span>
+          {failedCount > 0 ? (
+            <span className="text-destructive">{failedCount} failed</span>
+          ) : null}
+        </div>
+        <ul className="divide-y divide-border">
+          {pageRuns.map((run) => {
+            const durationMs = runDurationMs(run);
+
+            return (
+              <li className="flex min-w-0 items-center gap-2 py-3" key={run.id}>
+                <DialogPrimitive.Trigger
+                  aria-label={`Open run from ${formatSessionTimestamp(run.startedAt)}`}
+                  className="flex min-w-0 flex-1 items-center gap-3.5 text-left"
+                  onClick={() => setSelectedRunId(run.id)}
+                  title={`${runStatusLabel(run.status)} · ${formatSessionTimestamp(run.startedAt)}`}
                 >
-                  <DialogPrimitive.Trigger
-                    aria-label={`Open run from ${formatSessionTimestamp(run.startedAt)}`}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                    onClick={() => setSelectedRunId(run.id)}
-                  >
+                  {run.status === "running" ? (
                     <RunStatusIcon status={run.status} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-                        {run.read === false ? (
-                          <span
-                            aria-label="Unread"
-                            className="size-1.5 shrink-0 rounded-full bg-primary"
-                          />
-                        ) : null}
-                        <span
-                          className="truncate"
-                          title={formatSessionTimestamp(run.startedAt)}
-                        >
-                          {[
-                            runStatusLabel(run.status),
-                            formatSessionRelativeTime(run.startedAt),
-                            formatRunDuration(run.startedAt, run.completedAt),
-                            run.deliveryStatus === "failed"
-                              ? "Delivery failed"
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </span>
-                      </div>
-                      {runPreviewText(run) ? (
-                        <p
-                          className={cn(
-                            "mt-0.5 line-clamp-1 text-sm",
-                            run.status === "failed"
-                              ? "text-destructive"
-                              : "text-foreground/80"
-                          )}
-                        >
-                          {runPreviewText(run)}
-                        </p>
-                      ) : null}
-                    </div>
-                    <ArrowRight01Icon
-                      aria-hidden
-                      className="size-4 shrink-0 text-muted-foreground"
+                  ) : (
+                    <span
+                      aria-label={runStatusLabel(run.status)}
+                      className={cn(
+                        "size-2 shrink-0 rounded-full",
+                        run.status === "failed"
+                          ? "bg-destructive"
+                          : "bg-emerald-600 dark:bg-emerald-400"
+                      )}
+                      role="img"
                     />
-                  </DialogPrimitive.Trigger>
-                  <Button
-                    aria-label={`Delete run from ${formatSessionRelativeTime(run.startedAt)}`}
-                    className="shrink-0 text-muted-foreground hover:text-destructive"
-                    disabled={busy || run.status === "running"}
-                    onClick={() => onDeleteRun(run)}
-                    size="icon-sm"
-                    variant="ghost"
+                  )}
+                  {run.read === false ? (
+                    <span
+                      aria-label="Unread"
+                      className="size-1.5 shrink-0 rounded-full bg-primary"
+                    />
+                  ) : null}
+                  <span
+                    className={cn(
+                      "line-clamp-1 min-w-0 flex-1 text-sm",
+                      run.status === "failed"
+                        ? "text-destructive"
+                        : "text-foreground/80"
+                    )}
                   >
-                    <Delete02Icon aria-hidden className="size-4" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
+                    {runPreviewText(run) || runStatusLabel(run.status)}
+                    {run.deliveryStatus === "failed"
+                      ? " · Delivery failed"
+                      : ""}
+                  </span>
+                  <span className="hidden w-16 shrink-0 text-muted-foreground text-xs sm:block">
+                    {formatSessionRelativeTime(run.startedAt)}
+                  </span>
+                  <span
+                    aria-hidden
+                    className="relative hidden h-1.5 w-24 shrink-0 rounded-full bg-muted sm:block"
+                  >
+                    <span
+                      className={cn(
+                        "absolute inset-y-0 left-0 rounded-full",
+                        run.status === "failed"
+                          ? "bg-destructive/40"
+                          : "bg-muted-foreground/40"
+                      )}
+                      style={{
+                        width: `${Math.max(3, Math.round((durationMs / maxDurationMs) * 100))}%`,
+                      }}
+                    />
+                  </span>
+                  <span className="w-16 shrink-0 whitespace-nowrap text-right text-muted-foreground text-xs tabular-nums">
+                    {formatRunDuration(run.startedAt, run.completedAt) ?? ""}
+                  </span>
+                </DialogPrimitive.Trigger>
+              </li>
+            );
+          })}
+        </ul>
+        {pageCount > 1 ? (
+          <nav
+            aria-label="Run history pages"
+            className="flex items-center justify-between text-muted-foreground text-xs"
+          >
+            <span className="tabular-nums">
+              {pageStart + 1}–{pageStart + pageRuns.length} of {runs.length}
+            </span>
+            <div className="flex gap-1">
+              <Button
+                disabled={currentPage === 0}
+                onClick={() => setPage(currentPage - 1)}
+                size="sm"
+                variant="ghost"
+              >
+                Previous
+              </Button>
+              <Button
+                disabled={currentPage >= pageCount - 1}
+                onClick={() => setPage(currentPage + 1)}
+                size="sm"
+                variant="ghost"
+              >
+                Next
+              </Button>
+            </div>
+          </nav>
+        ) : null}
       </div>
       <DialogPrimitive.Portal>
         <DialogOverlay className="transition-opacity duration-200 ease-out data-closed:animate-none data-open:animate-none data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none" />
@@ -946,6 +1155,18 @@ function runStatusLabel(status: AutomationRunStatus): string {
     : status === "failed"
       ? "Failed"
       : "Running";
+}
+
+const RUN_PAGE_SIZE = 15;
+
+function runDurationMs(run: AutomationRunRecord) {
+  if (!run.completedAt) {
+    return 0;
+  }
+
+  const ms = Date.parse(run.completedAt) - Date.parse(run.startedAt);
+
+  return Number.isFinite(ms) ? Math.max(0, ms) : 0;
 }
 
 function RunStatusIcon({ status }: { status: AutomationRunStatus }) {

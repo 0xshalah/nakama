@@ -113,65 +113,6 @@ export function summarizeAutomationListMeta(
   return "Scheduled automation";
 }
 
-export function groupRunsByDay(
-  runs: AutomationRunRecord[]
-): Array<{ label: string; runs: AutomationRunRecord[] }> {
-  const buckets = new Map<string, AutomationRunRecord[]>();
-
-  for (const run of runs) {
-    const label = formatRunDayLabel(run.startedAt);
-    const bucket = buckets.get(label);
-
-    if (bucket) {
-      bucket.push(run);
-    } else {
-      buckets.set(label, [run]);
-    }
-  }
-
-  return Array.from(buckets, ([label, groupedRuns]) => ({
-    label,
-    runs: groupedRuns,
-  }));
-}
-
-function formatRunDayLabel(value: string): string {
-  const date = new Date(value);
-  const now = new Date();
-
-  if (Number.isNaN(date.getTime())) {
-    return "Earlier";
-  }
-
-  const startOfDate = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate()
-  ).getTime();
-
-  const startOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  ).getTime();
-
-  const diffDays = Math.round((startOfToday - startOfDate) / 86_400_000);
-
-  if (diffDays === 0) {
-    return "Today";
-  }
-
-  if (diffDays === 1) {
-    return "Yesterday";
-  }
-
-  return date.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
-  });
-}
-
 export function runPreviewText(run: AutomationRunRecord): string | null {
   if (run.status === "failed" && run.error?.trim()) {
     return run.error.trim();
@@ -236,6 +177,15 @@ export function formatRunDuration(
   }
 
   const minutes = Math.floor(seconds / 60);
+
+  if (minutes >= 60) {
+    const hourMinutes = minutes % 60;
+
+    return hourMinutes > 0
+      ? `${Math.floor(minutes / 60)}h ${hourMinutes}m`
+      : `${Math.floor(minutes / 60)}h`;
+  }
+
   const remainder = seconds % 60;
 
   return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;

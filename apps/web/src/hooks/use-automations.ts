@@ -61,22 +61,6 @@ export function useMarkAutomationRunsReadMutation() {
   });
 }
 
-export function useDeleteAutomationRunMutation() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      automationId,
-      runId,
-    }: {
-      automationId: string;
-      runId: string;
-    }) => client.deleteAutomationRun(automationId, runId),
-    onSuccess: (_data, variables) =>
-      invalidateAutomationQueries(queryClient, variables.automationId),
-  });
-}
-
 export function useUpdateAutomationMutation() {
   const queryClient = useQueryClient();
 

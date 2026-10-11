@@ -1,8 +1,5 @@
 import uFuzzy from "@leeoniya/ufuzzy";
-import type {
-  AutomationRunRecord,
-  StoredAutomation,
-} from "@nakama/core/contract";
+import type { StoredAutomation } from "@nakama/core/contract";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
@@ -12,7 +9,6 @@ import {
   useAutomationRunsQuery,
   useAutomationsQuery,
   useDeleteAutomationMutation,
-  useDeleteAutomationRunMutation,
   useMarkAutomationRunsReadMutation,
   useRunAutomationMutation,
   useUpdateAutomationMutation,
@@ -70,7 +66,6 @@ export function useAutomationsPage() {
 
   const updateMutation = useUpdateAutomationMutation();
   const deleteMutation = useDeleteAutomationMutation();
-  const deleteRunMutation = useDeleteAutomationRunMutation();
   const runMutation = useRunAutomationMutation();
   const markReadMutation = useMarkAutomationRunsReadMutation();
   const markingRead = useRef(new Set<string>());
@@ -82,15 +77,9 @@ export function useAutomationsPage() {
     null
   );
 
-  const [deleteRunTarget, setDeleteRunTarget] =
-    useState<AutomationRunRecord | null>(null);
-
   const [editDraft, setEditDraft] = useState<StoredAutomation | null>(null);
 
-  const busy =
-    updateMutation.isPending ||
-    deleteMutation.isPending ||
-    deleteRunMutation.isPending;
+  const busy = updateMutation.isPending || deleteMutation.isPending;
 
   const trimmedSearch = searchQuery.trim();
   const isSearching = trimmedSearch.length > 0;
@@ -257,24 +246,6 @@ export function useAutomationsPage() {
     }
   }
 
-  async function handleDeleteRunConfirm() {
-    if (!(selectedId && deleteRunTarget) || busy) {
-      return;
-    }
-
-    setError(null);
-
-    try {
-      await deleteRunMutation.mutateAsync({
-        automationId: selectedId,
-        runId: deleteRunTarget.id,
-      });
-      setDeleteRunTarget(null);
-    } catch (err) {
-      setError(formatError(err));
-    }
-  }
-
   async function handleRun(automationId: string) {
     if (busy || runningId) {
       return;
@@ -312,14 +283,20 @@ export function useAutomationsPage() {
     ]);
   }
 
-  function goToCreateAutomation() {
+  function goToCreateAutomation(draft?: string) {
+    if (draft && profileId) {
+      navigateToNewChat(profileId, { draft });
+
+      return;
+    }
+
     if (!superBotProfile) {
       setError("No super bot profile exists in this organization.");
 
       return;
     }
 
-    navigateToNewChat(superBotProfile.id);
+    navigateToNewChat(superBotProfile.id, { draft });
   }
 
   const selectedProfileName = selected
@@ -331,14 +308,12 @@ export function useAutomationsPage() {
     automations,
     automationsRefreshing,
     busy,
-    deleteRunTarget,
     deleteTarget,
     editDraft,
     error: error ?? (automationsError ? formatError(automationsError) : null),
     filteredAutomations,
     goToCreateAutomation,
     handleDeleteConfirm,
-    handleDeleteRunConfirm,
     handleRun,
     handleSaveEdit,
     handleToggleEnabled,
@@ -358,7 +333,6 @@ export function useAutomationsPage() {
     selectedId,
     selectedProfileName,
     selectedRunSummary,
-    setDeleteRunTarget,
     setDeleteTarget,
     setEditDraft,
     setSearchQuery,

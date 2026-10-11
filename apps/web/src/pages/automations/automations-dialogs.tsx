@@ -12,7 +12,6 @@ import {
 import { Spinner } from "@nakama/ui/spinner";
 import { Switch } from "@nakama/ui/switch";
 import { Cancel01Icon } from "hugeicons-react";
-import { formatSessionTimestamp } from "@/lib/chat-history";
 import { AutomationEditorForm } from "@/pages/automations/automations-components";
 import type { AutomationsPageState } from "@/pages/automations/use-automations-page";
 
@@ -23,11 +22,8 @@ type AutomationsDialogsProps = Pick<
   | "setEditDraft"
   | "deleteTarget"
   | "setDeleteTarget"
-  | "deleteRunTarget"
-  | "setDeleteRunTarget"
   | "handleSaveEdit"
   | "handleDeleteConfirm"
-  | "handleDeleteRunConfirm"
   | "updateEditDraft"
   | "profiles"
   | "profilesLoading"
@@ -39,11 +35,8 @@ export function AutomationsDialogs({
   setEditDraft,
   deleteTarget,
   setDeleteTarget,
-  deleteRunTarget,
-  setDeleteRunTarget,
   handleSaveEdit,
   handleDeleteConfirm,
-  handleDeleteRunConfirm,
   updateEditDraft,
   profiles,
   profilesLoading,
@@ -155,49 +148,6 @@ export function AutomationsDialogs({
             <Button
               disabled={busy}
               onClick={() => void handleDeleteConfirm()}
-              type="button"
-              variant="destructive"
-            >
-              {busy ? <Spinner className="size-4" /> : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        onOpenChange={(open) => {
-          if (!(open || busy)) {
-            setDeleteRunTarget(null);
-          }
-        }}
-        open={deleteRunTarget !== null}
-      >
-        <DialogContent className="gap-6 p-6 sm:max-w-md">
-          <DialogHeader className="gap-3">
-            <DialogTitle>Delete run history item?</DialogTitle>
-            <DialogDescription>
-              This permanently removes the run from{" "}
-              <span className="font-medium text-foreground">
-                {deleteRunTarget
-                  ? formatSessionTimestamp(deleteRunTarget.startedAt)
-                  : ""}
-              </span>
-              .
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
-            <Button
-              disabled={busy}
-              onClick={() => setDeleteRunTarget(null)}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => void handleDeleteRunConfirm()}
               type="button"
               variant="destructive"
             >

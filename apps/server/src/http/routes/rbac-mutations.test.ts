@@ -18,6 +18,63 @@ const ORG_ID = "org_test";
 
 const PASSWORD = "password123";
 
+test("automation run deletion is unavailable and preserves history", async () => {
+  const { app, databaseAdapter } = createMinimalHonoApp();
+  const admin = await setupFreshInstallSession(app, databaseAdapter);
+  const profile = await seedOrgDefaultProfile(databaseAdapter, admin.orgId!);
+  const now = new Date().toISOString();
+  await databaseAdapter.upsertAutomation({
+    createdAt: now,
+    definition: {},
+    enabled: true,
+    id: "automation_keep",
+    name: "Keep history",
+    orgId: admin.orgId!,
+    profileId: profile.id,
+    updatedAt: now,
+    version: 1,
+  });
+
+  const run = {
+    automationId: "automation_keep",
+    completedAt: now,
+    error: null,
+    id: "run_keep",
+    output: "Saved output",
+    startedAt: now,
+    status: "completed" as const,
+  };
+
+  await databaseAdapter.insertAutomationRun(run);
+
+  const response = await app.fetch(
+    new Request(
+      "http://localhost:4310/v1/automations/automation_keep/runs/run_keep",
+      {
+        headers: admin.headers({ "X-CSRF-Token": admin.csrfToken }),
+        method: "DELETE",
+      }
+    )
+  );
+
+  expect(response.status).toBe(404);
+  expect(
+    await databaseAdapter.getAutomationRun(run.automationId, run.id)
+  ).toMatchObject(run);
+
+  const specResponse = await app.fetch(
+    new Request("http://localhost:4310/openapi.json", {
+      headers: admin.headers(),
+    })
+  );
+
+  expect(specResponse.status).toBe(200);
+  const spec = await specResponse.json();
+  expect(
+    spec.paths["/v1/automations/{automationId}/runs/{runId}"]
+  ).toBeUndefined();
+});
+
 function createApp() {
   const calls: string[] = [];
 
@@ -50,7 +107,6 @@ function createApp() {
     automationService: {
       create: record("automationService.create"),
       delete: record("automationService.delete"),
-      deleteRun: record("automationService.deleteRun"),
       get: async () => ({ id: "a", name: "a", prompt: "x" }),
       listRuns: async () => [{ id: "r", status: "ok" }],
       update: record("automationService.update"),
@@ -76,7 +132,6 @@ const MUTATING_ROUTES: Array<{ method: string; path: string; body?: unknown }> =
     { body: { name: "x" }, method: "PUT", path: "/v1/automations/a1" },
     { method: "DELETE", path: "/v1/automations/a1" },
     { method: "POST", path: "/v1/automations/a1/run" },
-    { method: "DELETE", path: "/v1/automations/a1/runs/r1" },
     {
       body: { channel: "web", profileId: "default" },
       method: "POST",

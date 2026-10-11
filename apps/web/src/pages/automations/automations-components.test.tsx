@@ -208,7 +208,6 @@ test("keeps the run conversation mounted until the drawer finishes closing", asy
       root.render(
         <RunHistoryList
           busy={false}
-          onDeleteRun={() => {}}
           onRerun={() => {}}
           profileId="profile"
           running={false}
@@ -216,6 +215,10 @@ test("keeps the run conversation mounted until the drawer finishes closing", asy
         />
       );
     });
+
+    expect(
+      container.querySelector('button[aria-label^="Delete run"]')
+    ).toBeNull();
 
     const trigger = container.querySelector<HTMLButtonElement>(
       'button[aria-haspopup="dialog"]'

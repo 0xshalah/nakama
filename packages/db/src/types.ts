@@ -883,7 +883,6 @@ export interface DatabaseAdapter {
   createUser(record: StoredUserRecord): Promise<void>;
   deleteAttachment(id: string): Promise<boolean>;
   deleteAutomation(id: string): Promise<boolean>;
-  deleteAutomationRun(automationId: string, runId: string): Promise<boolean>;
   deleteComposioToolkit(id: string): Promise<boolean>;
   deleteComposioUserConnection(id: string): Promise<boolean>;
   deleteMcpServer(id: string): Promise<boolean>;

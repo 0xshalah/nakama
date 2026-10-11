@@ -40,7 +40,7 @@ See [Docker](/docker) for how the worker is started in a container.
 
 ### Run history
 
-Every run is recorded with a status of `running`, `completed`, or `failed`, plus its output or error and start and finish timestamps. Open a run to read the full output, copy its text, or delete it. Opening an automation automatically marks its runs read, so the unread dot and notification count clear without a separate **Mark runs read** control.
+Every run is recorded with a status of `running`, `completed`, or `failed`, plus its output or error and start and finish timestamps. Open a run to read the full output or copy its text. Opening an automation automatically marks its runs read, so the unread dot and notification count clear without a separate **Mark runs read** control.
 
 You can start any enabled automation manually with **Run now**, the run API, or the chat automation tool. **Run again** appears on a failed run and starts the automation again. It does not retry a completed one-time `runAt`: that automation disables itself before its first run, including when that run fails, so **Run again** reports that it is disabled. Create another one-time automation when you need a fresh timestamp.
 
@@ -75,7 +75,6 @@ Creating or changing an automation requires a non-viewer role. A caller-supplied
 | `GET` `PUT` `DELETE` | `/v1/automations/:automationId` |
 | `POST` | `/v1/automations/:automationId/run` |
 | `GET` | `/v1/automations/:automationId/runs` |
-| `DELETE` | `/v1/automations/:automationId/runs/:runId` |
 | `POST` | `/v1/automations/:automationId/runs/mark-read` |
 | `POST` | `/v1/automations/draft` |
 
