@@ -1,3 +1,4 @@
+import { Tabs } from "@base-ui/react/tabs";
 import type { ProfileSummary } from "@nakama/core";
 import { Button } from "@nakama/ui/button";
 import {
@@ -7,12 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@nakama/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@nakama/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -27,14 +22,14 @@ import {
   ArrowRight01Icon,
   Building06Icon,
   CloudDownloadIcon,
+  CloudUploadIcon,
   Copy01Icon,
   Delete02Icon,
-  MoreHorizontalIcon,
 } from "hugeicons-react";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { DiscordSettingsCard } from "@/components/DiscordSettingsCard";
-import { ExportProfileButton } from "@/components/profiles/ExportProfileButton";
+import { ExportProfileDialog } from "@/components/profiles/ExportProfileDialog";
 import { ProfileSkillsSettingsSection } from "@/components/profiles/ProfileSkillsSettingsSection";
 import { SlackSettingsCard } from "@/components/SlackSettingsCard";
 import { SoulTab } from "@/components/soul-tools/SoulTab";
@@ -51,83 +46,156 @@ import { client, formatError } from "@/lib/client";
 import { profilePath } from "@/lib/navigation";
 import { queryKeys } from "@/lib/query-keys";
 import { ProfileConfigAssignmentsSection } from "@/pages/profiles/profile-config-assignments-section";
-import { ProfileConfigIdentitySection } from "@/pages/profiles/profile-config-identity-section";
+import {
+  ProfileConfigIdentitySection,
+  ProfileSystemPromptCard,
+} from "@/pages/profiles/profile-config-identity-section";
 import { ProfileHistoryTab } from "@/pages/profiles/profile-history-tab";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
 
+const sectionTabClass =
+  "whitespace-nowrap rounded-full px-2 py-1.5 text-center font-medium text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm sm:px-3";
+
 export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
   const { user, activeOrg } = useAuth();
+  const { hash } = useLocation();
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const { channels, error: channelsError, isPending } = useProfileChannels();
+
+  const [section, setSection] = useState(
+    state.detailTab === "proposals"
+      ? "tools"
+      : hash === "#profile-connections"
+        ? "channels"
+        : "prompt"
+  );
 
   if (!state.detail) {
     return null;
   }
 
   const canCreateProfile = user?.isPlatformAdmin === true;
-  const canPack = activeOrg?.role === "admin" || canCreateProfile;
+  const isOrgAdmin = activeOrg?.role === "admin";
+  const canPack = isOrgAdmin || canCreateProfile;
   const { busy, detail, selectedId } = state;
+  const showChannels = canPack && !detail.isSuper;
+  const channelsReady = !(isPending || channelsError);
+
+  const sections = [
+    { hint: "", label: "Prompt", value: "prompt" },
+    ...(showChannels
+      ? [
+          {
+            hint: channelsReady
+              ? `${channels.filter((channel) => channel.connected).length}/${channels.length}`
+              : "",
+            label: "Channels",
+            value: "channels",
+          },
+        ]
+      : []),
+    ...(isOrgAdmin ? [{ hint: "", label: "Behavior", value: "behavior" }] : []),
+    {
+      hint: String(detail.tools.filter((tool) => !tool.pluginId).length),
+      label: "Tools",
+      value: "tools",
+    },
+  ];
 
   return (
     <div
-      className="mx-auto max-w-3xl space-y-8"
+      className="mx-auto flex w-fit max-w-3xl flex-col gap-8"
       id="profile-detail-panel-profile"
     >
-      {canPack && !detail.isSuper ? (
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button
-            aria-label="Import profile"
-            disabled={busy}
-            onClick={() => state.setImportOpen(true)}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <CloudDownloadIcon aria-hidden className="size-3.5" />
-            <span>Import</span>
-          </Button>
-          <ExportProfileButton
-            disabled={busy}
-            profileId={detail.id}
-            profileName={detail.name}
-          />
-          {canCreateProfile && selectedId ? (
-            <ProfileAdminMenu key={selectedId} state={state} />
-          ) : null}
-        </div>
-      ) : null}
       <ProfileConfigIdentitySection state={state} />
-      {canPack && !detail.isSuper ? (
-        <ChannelProfileContext.Provider
-          key={`${activeOrg?.id}:${detail.id}`}
-          value={detail.id}
+      <Tabs.Root
+        className="min-w-0 space-y-6"
+        key={detail.id}
+        onValueChange={(value) => setSection(String(value))}
+        value={
+          sections.some((item) => item.value === section) ? section : "prompt"
+        }
+      >
+        <Tabs.List
+          aria-label="Agent sections"
+          className="mx-auto grid w-full max-w-full auto-cols-fr grid-flow-col gap-1 overflow-x-auto rounded-full bg-muted p-1 sm:w-fit"
         >
-          <ProfileConnections />
-        </ChannelProfileContext.Provider>
+          {sections.map(({ hint, label, value }) => (
+            <Tabs.Tab className={sectionTabClass} key={value} value={value}>
+              {label}
+              {hint ? (
+                <span className="ml-1.5 hidden text-muted-foreground/70 text-xs tabular-nums sm:inline">
+                  {hint}
+                </span>
+              ) : null}
+            </Tabs.Tab>
+          ))}
+        </Tabs.List>
+        <Tabs.Panel className="w-0 min-w-full space-y-6" value="prompt">
+          <ProfileSystemPromptCard state={state} />
+          {canPack ? (
+            <section className="space-y-4" id="profile-prompt">
+              {canCreateProfile ? <SoulTab profileId={detail.id} /> : null}
+              <details className="group/history">
+                <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-muted-foreground/55 text-sm hover:text-muted-foreground [&::-webkit-details-marker]:hidden">
+                  <span>Change histories</span>
+                  <ArrowDown01Icon
+                    aria-hidden="true"
+                    className="size-3.5 -rotate-90 transition-transform group-open/history:rotate-0"
+                  />
+                </summary>
+                <div className="pt-3">
+                  <ProfileHistoryTab profileId={detail.id} />
+                </div>
+              </details>
+            </section>
+          ) : null}
+        </Tabs.Panel>
+        {showChannels ? (
+          <Tabs.Panel className="w-0 min-w-full" value="channels">
+            <ChannelProfileContext.Provider
+              key={`${activeOrg?.id}:${detail.id}`}
+              value={detail.id}
+            >
+              <ProfileConnections />
+            </ChannelProfileContext.Provider>
+          </Tabs.Panel>
+        ) : null}
+        {isOrgAdmin ? (
+          <Tabs.Panel className="w-0 min-w-full" value="behavior">
+            <ProfileSkillsSettingsSection disabled={busy} profile={detail} />
+          </Tabs.Panel>
+        ) : null}
+        <Tabs.Panel className="w-0 min-w-full" value="tools">
+          <ProfileConfigAssignmentsSection key={detail.id} state={state} />
+        </Tabs.Panel>
+      </Tabs.Root>
+      {(showChannels || canCreateProfile) && selectedId ? (
+        <ProfileFooterActions
+          onExport={() => setExportOpen(true)}
+          onMove={() => setMoveOpen(true)}
+          showAdmin={canCreateProfile}
+          showPack={showChannels}
+          state={state}
+        />
       ) : null}
-      {canPack ? (
-        <section className="space-y-4" id="profile-prompt">
-          {canCreateProfile ? <SoulTab profileId={detail.id} /> : null}
-          <details className="group/history">
-            <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-muted-foreground/55 text-sm hover:text-muted-foreground [&::-webkit-details-marker]:hidden">
-              <span>Change histories</span>
-              <ArrowDown01Icon
-                aria-hidden="true"
-                className="size-3.5 -rotate-90 transition-transform group-open/history:rotate-0"
-              />
-            </summary>
-            <div className="pt-3">
-              <ProfileHistoryTab profileId={detail.id} />
-            </div>
-          </details>
-        </section>
-      ) : null}
-      <ProfileSkillsSettingsSection disabled={busy} profile={detail} />
-      <ProfileConfigAssignmentsSection key={detail.id} state={state} />
+      <MoveProfileDialog
+        onOpenChange={setMoveOpen}
+        open={moveOpen}
+        state={state}
+      />
+      <ExportProfileDialog
+        onOpenChange={setExportOpen}
+        open={exportOpen}
+        profileId={detail.id}
+        profileName={detail.name}
+      />
     </div>
   );
 }
 
-export function ProfileConnections() {
-  const profileId = useChannelProfileId();
+function useProfileChannels() {
   const { data: status, isPending, error } = useSystemStatusQuery();
 
   // Brand SVGs: Simple Icons v16 (CC0), https://simpleicons.org. Slack is from
@@ -184,6 +252,13 @@ export function ProfileConnections() {
 
     return { ...channel, action, connected, statusLabel };
   });
+
+  return { channels, error, isPending };
+}
+
+export function ProfileConnections() {
+  const profileId = useChannelProfileId();
+  const { channels, error, isPending } = useProfileChannels();
 
   return (
     <section className="space-y-2" id="profile-connections">
@@ -297,71 +372,85 @@ export function ProfileChannelSettingsPage() {
   );
 }
 
-function ProfileAdminMenu({ state }: { state: ProfilesPageState }) {
-  const [moveOpen, setMoveOpen] = useState(false);
-  const { busy, detail, selectedId } = state;
+function profileDeleteDisabled(state: ProfilesPageState) {
+  return (
+    state.busy ||
+    (state.detail?.isDefault === true && state.profiles.length < 3)
+  );
+}
 
-  const deleteDisabled =
-    busy || (detail?.isDefault === true && state.profiles.length < 3);
+function ProfileFooterActions({
+  onExport,
+  onMove,
+  showAdmin,
+  showPack,
+  state,
+}: {
+  onExport: () => void;
+  onMove: () => void;
+  showAdmin: boolean;
+  showPack: boolean;
+  state: ProfilesPageState;
+}) {
+  const { busy, selectedId } = state;
+
+  const actions = [
+    ...(showPack
+      ? [
+          {
+            disabled: busy,
+            Icon: CloudDownloadIcon,
+            label: "Import agent",
+            onClick: () => state.setImportOpen(true),
+          },
+          {
+            disabled: busy,
+            Icon: CloudUploadIcon,
+            label: "Export agent",
+            onClick: onExport,
+          },
+        ]
+      : []),
+    ...(showAdmin
+      ? [
+          {
+            disabled: busy,
+            Icon: Building06Icon,
+            label: "Move agent",
+            onClick: onMove,
+          },
+          {
+            disabled: busy,
+            Icon: Copy01Icon,
+            label: "Duplicate",
+            onClick: () => selectedId && state.openCloneDialog(selectedId),
+          },
+          {
+            destructive: true,
+            disabled: profileDeleteDisabled(state),
+            Icon: Delete02Icon,
+            label: "Delete agent",
+            onClick: () => selectedId && state.openDeleteDialog(selectedId),
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              aria-label="More profile actions"
-              disabled={busy}
-              size="icon-sm"
-              type="button"
-              variant="outline"
-            />
-          }
+    <footer className="grid w-0 min-w-full grid-cols-2 gap-2">
+      {actions.map(({ Icon, destructive, disabled, label, onClick }) => (
+        <button
+          className={`flex h-10 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-border px-3 text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${destructive ? "col-span-2 text-destructive" : "text-muted-foreground hover:text-foreground"}`}
+          disabled={disabled}
+          key={label}
+          onClick={onClick}
+          type="button"
         >
-          <MoreHorizontalIcon aria-hidden className="size-4" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-44">
-          <DropdownMenuItem
-            className="cursor-pointer"
-            disabled={busy}
-            onClick={() => setMoveOpen(true)}
-          >
-            <Building06Icon aria-hidden />
-            Change organization
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="cursor-pointer"
-            disabled={busy}
-            onClick={() => {
-              if (selectedId) {
-                state.openCloneDialog(selectedId);
-              }
-            }}
-          >
-            <Copy01Icon aria-hidden />
-            Clone agent
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="cursor-pointer"
-            disabled={deleteDisabled}
-            onClick={() => {
-              if (selectedId) {
-                state.openDeleteDialog(selectedId);
-              }
-            }}
-            variant="destructive"
-          >
-            <Delete02Icon aria-hidden />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <MoveProfileDialog
-        onOpenChange={setMoveOpen}
-        open={moveOpen}
-        state={state}
-      />
-    </>
+          <Icon aria-hidden className="size-4" />
+          {label}
+        </button>
+      ))}
+    </footer>
   );
 }
 

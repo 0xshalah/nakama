@@ -26,7 +26,6 @@ import {
 } from "@/lib/models";
 import {
   EditableProfileAvatar,
-  Field,
   ProfileSaveIndicator,
 } from "@/pages/profiles/profiles-ui";
 import type { ProfilesPageState } from "@/pages/profiles/use-profiles-page";
@@ -82,8 +81,6 @@ export function ProfileConfigIdentitySection({
     flushSave,
     saveStatus,
     isDirty,
-    editPrompt,
-    handleEditPromptChange,
     handleAvatarSelected,
     handleAvatarRemove,
   } = state;
@@ -96,7 +93,7 @@ export function ProfileConfigIdentitySection({
   const nameMissing = isDirty && !editName.trim();
 
   return (
-    <Card className="w-full overflow-hidden shadow-none">
+    <header className="flex w-0 min-w-full flex-col items-center gap-3">
       <input
         accept="image/jpeg,image/png,image/gif,image/webp"
         className="hidden"
@@ -105,76 +102,80 @@ export function ProfileConfigIdentitySection({
         ref={avatarInputRef}
         type="file"
       />
-
-      <CardContent className="min-w-0 divide-y divide-border p-0">
-        <div className="flex min-w-0 flex-wrap items-end gap-3 px-4 py-3 sm:flex-nowrap">
-          <EditableProfileAvatar
-            disabled={
-              identityDisabled ||
-              uploadAvatarMutation.isPending ||
-              deleteAvatarMutation.isPending
-            }
-            onPick={() => avatarInputRef.current?.click()}
-            onRemove={handleAvatarRemove}
-            profile={detail}
-            size="ml"
-            uploading={
-              uploadAvatarMutation.isPending || deleteAvatarMutation.isPending
-            }
-          />
-
-          <Field className="min-w-0 flex-1" htmlFor="profile-name" label="Name">
-            <Input
-              className="h-8 min-w-0 font-normal"
-              disabled={identityDisabled}
-              id="profile-name"
-              onBlur={() => void flushSave()}
-              onChange={(event) => handleEditNameChange(event.target.value)}
-              readOnly={!canManageProfile}
-              value={editName}
-            />
-          </Field>
-
-          <Field
-            className="w-full min-w-0 sm:w-auto sm:max-w-[26rem]"
-            htmlFor="profile-chat-agent"
-            label="Agent"
-          >
-            <ProfileAgentPicker
-              disabled={identityDisabled}
-              hasAcpAgent={Boolean(detail.acpAgent)}
-              state={state}
-            />
-          </Field>
-        </div>
-
-        {(detail.isSuper || saveStatus !== "idle" || nameMissing) && (
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-4 py-3 text-muted-foreground text-xs">
-            {detail.isSuper ? (
-              <span className="scope-badge bg-muted text-muted-foreground">
-                super
-              </span>
-            ) : null}
-            <ProfileSaveIndicator
-              inline
-              leadingSeparator={detail.isSuper}
-              nameMissing={nameMissing}
-              saveStatus={saveStatus}
-            />
-          </div>
-        )}
-
-        <div className="px-4 py-3">
-          <ExpandableTextarea
-            dialogDescription="Instructions sent to the model at the start of each chat."
-            disabled={identityDisabled}
-            htmlFor="profile-prompt"
-            label="System prompt"
-            onChange={(event) => handleEditPromptChange(event.target.value)}
-            onSave={flushSave}
-            value={editPrompt}
+      <EditableProfileAvatar
+        disabled={
+          identityDisabled ||
+          uploadAvatarMutation.isPending ||
+          deleteAvatarMutation.isPending
+        }
+        onPick={() => avatarInputRef.current?.click()}
+        onRemove={handleAvatarRemove}
+        profile={detail}
+        size="lg"
+        uploading={
+          uploadAvatarMutation.isPending || deleteAvatarMutation.isPending
+        }
+      />
+      <Input
+        aria-label="Name"
+        className="h-auto w-full max-w-md border-transparent bg-transparent px-2 py-1 text-center font-semibold text-2xl shadow-none hover:border-input focus-visible:border-ring md:text-2xl dark:bg-transparent"
+        disabled={identityDisabled}
+        id="profile-name"
+        onBlur={() => void flushSave()}
+        onChange={(event) => handleEditNameChange(event.target.value)}
+        readOnly={!canManageProfile}
+        value={editName}
+      />
+      <ProfileAgentPicker
+        disabled={identityDisabled}
+        hasAcpAgent={Boolean(detail.acpAgent)}
+        state={state}
+      />
+      {detail.isSuper || saveStatus !== "idle" || nameMissing ? (
+        <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-muted-foreground text-xs">
+          {detail.isSuper ? (
+            <span className="scope-badge bg-muted text-muted-foreground">
+              super
+            </span>
+          ) : null}
+          <ProfileSaveIndicator
+            inline
+            leadingSeparator={detail.isSuper}
+            nameMissing={nameMissing}
+            saveStatus={saveStatus}
           />
         </div>
+      ) : null}
+    </header>
+  );
+}
+
+export function ProfileSystemPromptCard({ state }: { state: IdentityState }) {
+  const {
+    detail,
+    busy,
+    canManageProfile,
+    editPrompt,
+    flushSave,
+    handleEditPromptChange,
+  } = state;
+
+  if (!detail) {
+    return null;
+  }
+
+  return (
+    <Card className="w-full shadow-none">
+      <CardContent className="px-4 py-3">
+        <ExpandableTextarea
+          dialogDescription="Instructions sent to the model at the start of each chat."
+          disabled={busy || !canManageProfile}
+          htmlFor="profile-prompt"
+          label="System prompt"
+          onChange={(event) => handleEditPromptChange(event.target.value)}
+          onSave={flushSave}
+          value={editPrompt}
+        />
       </CardContent>
     </Card>
   );
@@ -217,7 +218,7 @@ function ProfileAgentPicker({
       };
 
   return (
-    <div className="flex h-8 min-w-0 overflow-hidden rounded-lg border border-input dark:bg-input/30">
+    <div className="flex min-w-0 max-w-full items-center text-muted-foreground text-sm">
       <ProfileChatAgentField
         disabled={disabled}
         hasCustomAgent={hasAcpAgent && !acpAgentId}
@@ -226,6 +227,7 @@ function ProfileAgentPicker({
         selectedPresetId={acpAgentId}
       />
 
+      <span aria-hidden>·</span>
       <ProfileModelField disabled={disabled || acpIsSaving} {...model} />
       {hasAcpAgent && acpEffortOptions?.length ? (
         <Select
@@ -278,7 +280,7 @@ function ProfileModelField({
     <Popover onOpenChange={setModelPickerOpen} open={modelPickerOpen}>
       <PopoverTrigger
         aria-label="Select model"
-        className="flex h-8 min-w-0 flex-1 cursor-pointer items-center justify-between gap-2 bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-input/50"
+        className="flex h-8 min-w-0 cursor-pointer items-center gap-1 rounded-md bg-transparent px-2 text-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={disabled || providerModelGroups.length === 0}
         id="profile-model"
       >
@@ -373,7 +375,7 @@ function ProfileChatAgentField({
     >
       <SelectTrigger
         aria-label="Chat agent"
-        className="h-full w-auto rounded-none border-0 border-input border-r dark:bg-transparent"
+        className="h-8 w-auto gap-1 rounded-md border-0 bg-transparent px-2 text-muted-foreground shadow-none hover:text-foreground dark:bg-transparent"
         id="profile-chat-agent"
       >
         <SelectValue placeholder="Nakama">
