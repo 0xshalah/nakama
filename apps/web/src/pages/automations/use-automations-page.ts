@@ -284,8 +284,8 @@ export function useAutomationsPage() {
   }
 
   function goToCreateAutomation(draft?: string) {
-    if (draft && profileId) {
-      navigateToNewChat(profileId, { draft });
+    if (profileId) {
+      navigateToNewChat(profileId, { draft, intent: "automation" });
 
       return;
     }
@@ -296,7 +296,10 @@ export function useAutomationsPage() {
       return;
     }
 
-    navigateToNewChat(superBotProfile.id, { draft });
+    navigateToNewChat(superBotProfile.id, {
+      draft,
+      intent: "automation",
+    });
   }
 
   const selectedProfileName = selected
