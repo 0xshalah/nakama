@@ -676,6 +676,22 @@
   .workflow-run-actions p[role="alert"] {
     color: var(--destructive);
   }
+  .workflow-run-actions p[data-missing-tool="true"] {
+    color: var(--muted-foreground);
+  }
+  .workflow-run-actions [data-slot="button"] {
+    flex-shrink: 0;
+    border-radius: 999px;
+  }
+  .workflow-run-receipts > summary {
+    width: fit-content;
+    font-size: 12px;
+    color: var(--muted-foreground);
+    cursor: pointer;
+  }
+  .workflow-run-receipts[open] > summary {
+    margin-bottom: 8px;
+  }
   .workflow-run-steps {
     padding: 0;
     margin: 0;

@@ -677,6 +677,22 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-run-actions p[role="alert"] {
     color: var(--destructive);
   }
+  .workflow-run-actions p[data-missing-tool="true"] {
+    color: var(--muted-foreground);
+  }
+  .workflow-run-actions [data-slot="button"] {
+    flex-shrink: 0;
+    border-radius: 999px;
+  }
+  .workflow-run-receipts > summary {
+    width: fit-content;
+    font-size: 12px;
+    color: var(--muted-foreground);
+    cursor: pointer;
+  }
+  .workflow-run-receipts[open] > summary {
+    margin-bottom: 8px;
+  }
   .workflow-run-steps {
     padding: 0;
     margin: 0;
@@ -2386,9 +2402,11 @@ function apply(ctx) {
     }, needsLook)))), error && /* @__PURE__ */ React.createElement(WorkflowError, {
       message: error
     }), view === "runs" && /* @__PURE__ */ React.createElement(RunHistory, {
+      agent: profiles.find((profile) => profile.id === agentId),
       canRun: Boolean(workflow) && !dirty && enabled && !busy,
       onRunAgain: (input) => runWorkflow(input),
       runs,
+      stepIds: steps.map((step) => step.id),
       stepNames: Object.fromEntries(allSteps.map((step) => [step.id, title(step.id)]))
     }), view === "data" && /* @__PURE__ */ React.createElement("section", {
       "aria-label": "Workflow data",
@@ -2721,6 +2739,8 @@ function apply(ctx) {
   }
   function RunHistory({
     runs,
+    agent,
+    stepIds,
     stepNames,
     canRun,
     onRunAgain
@@ -2753,9 +2773,10 @@ function apply(ctx) {
         key: entries[0].id
       }, /* @__PURE__ */ React.createElement("h3", null, group === "Earlier" ? new Date(entries[0].startedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : group, /* @__PURE__ */ React.createElement("span", {
         className: "workflow-empty"
-      }, entries.length === 1 ? "1 run" : `${entries.length} runs`, worked > 0 && ` · ${worked} worked`)), /* @__PURE__ */ React.createElement("ol", {
+      }, entries.length === 1 ? "1 run" : `${entries.length} runs`, worked > 0 && (entries.length === 1 ? " · worked" : ` · ${worked} worked`))), /* @__PURE__ */ React.createElement("ol", {
         className: "workflow-day-runs"
       }, entries.map((run) => /* @__PURE__ */ React.createElement(RunRow, {
+        agent,
         canRun,
         expanded: run.id === open,
         key: run.id,
@@ -2763,12 +2784,13 @@ function apply(ctx) {
         onRunAgain,
         onToggle: () => setOpenId(run.id === open ? null : run.id),
         run,
-        stepIds: Object.keys(stepNames)
+        stepIds
       }))));
     })));
   }
   function RunRow({
     run,
+    agent,
     stepIds,
     name,
     expanded,
@@ -2779,9 +2801,10 @@ function apply(ctx) {
     const receipts = run.steps ?? [];
     const timeline = runTimeline(run);
     const failed = receipts.find((step) => step.status === "failed");
-    const ids = [
-      ...new Set([...stepIds, ...receipts.map((step) => step.stepId)])
-    ];
+    const missingTool = /^Unknown tool: (.+)$/i.exec(run.error ?? "")?.[1];
+    const missingName = missingTool ? toolParts(missingTool).app || toolParts(missingTool).action : "";
+    const recordedIds = receipts.filter((step) => step.kind !== "summarize").map((step) => step.stepId);
+    const ids = recordedIds.some((id) => !stepIds.includes(id)) ? recordedIds : stepIds;
     const reached = ids.filter((id) => timeline.has(id)).length;
     return /* @__PURE__ */ React.createElement("li", {
       "data-status": run.status
@@ -2810,18 +2833,24 @@ function apply(ctx) {
     }, /* @__PURE__ */ React.createElement("div", {
       className: "workflow-run-actions"
     }, run.error ? /* @__PURE__ */ React.createElement("p", {
+      "data-missing-tool": Boolean(missingTool),
       role: "alert"
-    }, readableError(run.error)) : /* @__PURE__ */ React.createElement("p", {
+    }, missingTool && agent ? `${agent.name} does not have the ${missingName} tool.` : readableError(run.error)) : /* @__PURE__ */ React.createElement("p", {
       className: "workflow-empty"
-    }, formatRunTime(run.startedAt)), /* @__PURE__ */ React.createElement(Button, {
+    }, formatRunTime(run.startedAt)), missingTool && agent && /* @__PURE__ */ React.createElement(Button, {
+      render: /* @__PURE__ */ React.createElement("a", {
+        href: `/profiles?profile=${encodeURIComponent(agent.id)}&section=tools`
+      }),
+      size: "sm"
+    }, "Turn on tool"), /* @__PURE__ */ React.createElement(Button, {
       disabled: !canRun,
       onClick: () => onRunAgain(run.input),
       size: "sm",
       type: "button",
       variant: "secondary"
-    }, /* @__PURE__ */ React.createElement(Icon, {
-      kind: "play"
-    }), "Run again")), /* @__PURE__ */ React.createElement("ol", {
+    }, "Run again")), /* @__PURE__ */ React.createElement("details", {
+      className: "workflow-run-receipts"
+    }, /* @__PURE__ */ React.createElement("summary", null, "Step details"), /* @__PURE__ */ React.createElement("ol", {
       className: "workflow-run-steps"
     }, receipts.map((receipt) => {
       const duration = timeline.get(receipt.stepId)?.duration;
@@ -2837,7 +2866,7 @@ function apply(ctx) {
         receipt,
         showError: false
       })));
-    })), run.status === "completed" && run.output && /* @__PURE__ */ React.createElement("section", {
+    }))), run.status === "completed" && run.output && /* @__PURE__ */ React.createElement("section", {
       className: "workflow-history-result"
     }, /* @__PURE__ */ React.createElement("h4", null, "Result"), /* @__PURE__ */ React.createElement("p", null, run.output))));
   }

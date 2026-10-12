@@ -24,7 +24,13 @@ import {
 import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { Add01Icon, MoreHorizontalIcon, Search01Icon } from "hugeicons-react";
-import { type MouseEvent, useRef, useState } from "react";
+import {
+  type Dispatch,
+  type MouseEvent,
+  type SetStateAction,
+  useRef,
+  useState,
+} from "react";
 import { Link, useParams } from "react-router-dom";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/use-auth";
@@ -1151,7 +1157,6 @@ function PluginAgentAccessDialog({
   const access = usePluginAgentAccess();
   const save = useSavePluginAgentAccess();
   const [changes, setChanges] = useState<Record<string, boolean>>({});
-  const [query, setQuery] = useState("");
   const data = access.data;
 
   const hasResources =
@@ -1175,32 +1180,6 @@ function PluginAgentAccessDialog({
       return selected ? !state.full : state.assigned > 0;
     })
   );
-
-  const profiles = data?.profiles ?? [];
-
-  const isSelected = (profile: (typeof profiles)[number]) =>
-    data
-      ? (changes[profile.id] ??
-        pluginAgentAccessState(profile, plugin.pluginId, data).full)
-      : false;
-
-  const needle = query.trim().toLowerCase();
-
-  const shown = needle
-    ? profiles.filter((profile) => profile.name.toLowerCase().includes(needle))
-    : profiles;
-
-  const selectedCount = profiles.filter(isSelected).length;
-
-  const allShownSelected = shown.length > 0 && shown.every(isSelected);
-  const someShownSelected = shown.some(isSelected);
-
-  function selectShown(selected: boolean) {
-    setChanges((current) => ({
-      ...current,
-      ...Object.fromEntries(shown.map((profile) => [profile.id, selected])),
-    }));
-  }
 
   async function onSave() {
     try {
@@ -1251,99 +1230,21 @@ function PluginAgentAccessDialog({
             </Button>
           </div>
         ) : null}
-        {data && !access.error ? (
-          hasResources ? (
-            <div className="space-y-3">
-              {profiles.length > 0 ? (
-                <>
-                  <div className="relative">
-                    <Search01Icon
-                      aria-hidden="true"
-                      className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <Input
-                      aria-label="Search agents"
-                      className="pl-9"
-                      onChange={(event) => setQuery(event.target.value)}
-                      placeholder="Search agents"
-                      value={query}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between gap-3 border-border border-y px-2 py-1.5">
-                    <label className="flex cursor-pointer items-center gap-3 font-medium text-sm">
-                      <Checkbox
-                        checked={allShownSelected}
-                        disabled={busy || shown.length === 0}
-                        indeterminate={someShownSelected && !allShownSelected}
-                        onCheckedChange={selectShown}
-                      />
-                      Select all
-                    </label>
-                    <span className="text-muted-foreground text-xs">
-                      {selectedCount} of {profiles.length} selected
-                    </span>
-                  </div>
-                </>
-              ) : null}
-              <div className="max-h-80 space-y-1 overflow-y-auto">
-                {profiles.length === 0 ? (
-                  <p className="py-4 text-muted-foreground text-sm">
-                    No agents in this organization.
-                  </p>
-                ) : null}
-                {profiles.length > 0 && shown.length === 0 ? (
-                  <p className="py-4 text-center text-muted-foreground text-sm">
-                    No agents match.
-                  </p>
-                ) : null}
-                {shown.map((profile) => {
-                  const state = pluginAgentAccessState(
-                    profile,
-                    plugin.pluginId,
-                    data
-                  );
-
-                  const partial =
-                    changes[profile.id] === undefined &&
-                    state.assigned > 0 &&
-                    !state.full;
-
-                  return (
-                    <label
-                      className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2.5 hover:bg-muted/50"
-                      key={profile.id}
-                    >
-                      <Checkbox
-                        checked={changes[profile.id] ?? state.full}
-                        disabled={busy}
-                        indeterminate={partial}
-                        onCheckedChange={(checked) =>
-                          setChanges((current) => ({
-                            ...current,
-                            [profile.id]: checked,
-                          }))
-                        }
-                      />
-                      <ProfileAvatar profile={profile} size="sm" />
-                      <span className="min-w-0 flex-1 break-words text-sm">
-                        {profile.name}
-                      </span>
-                      {partial ? (
-                        <span className="text-muted-foreground text-xs">
-                          Partial access
-                        </span>
-                      ) : null}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
+        {data &&
+          !access.error &&
+          (hasResources ? (
+            <PluginAgentAccessList
+              busy={busy}
+              changes={changes}
+              data={data}
+              pluginId={plugin.pluginId}
+              setChanges={setChanges}
+            />
           ) : (
             <p className="text-muted-foreground text-sm">
               This plugin has no tools or skills to assign.
             </p>
-          )
-        ) : null}
+          ))}
         {save.error ? (
           <p className="text-destructive text-sm" role="alert">
             {formatError(save.error)} Some changes may have been saved. Review
@@ -1369,6 +1270,129 @@ function PluginAgentAccessDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PluginAgentAccessList({
+  busy,
+  changes,
+  data,
+  pluginId,
+  setChanges,
+}: {
+  busy: boolean;
+  changes: Record<string, boolean>;
+  data: NonNullable<ReturnType<typeof usePluginAgentAccess>["data"]>;
+  pluginId: string;
+  setChanges: Dispatch<SetStateAction<Record<string, boolean>>>;
+}) {
+  const [query, setQuery] = useState("");
+
+  const profiles = data.profiles;
+
+  const isSelected = (profile: (typeof profiles)[number]) =>
+    changes[profile.id] ?? pluginAgentAccessState(profile, pluginId, data).full;
+
+  const needle = query.trim().toLowerCase();
+
+  const shown = profiles.filter((profile) =>
+    profile.name.toLowerCase().includes(needle)
+  );
+
+  const selectedCount = profiles.filter(isSelected).length;
+
+  const allShownSelected = shown.length > 0 && shown.every(isSelected);
+  const someShownSelected = shown.some(isSelected);
+
+  function selectShown(selected: boolean) {
+    setChanges((current) => ({
+      ...current,
+      ...Object.fromEntries(shown.map((profile) => [profile.id, selected])),
+    }));
+  }
+
+  return (
+    <div className="space-y-3">
+      {profiles.length > 0 ? (
+        <>
+          <div className="relative">
+            <Search01Icon
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              aria-label="Search agents"
+              className="pl-9"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search agents"
+              value={query}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 border-border border-y px-2 py-1.5">
+            <label className="flex cursor-pointer items-center gap-3 font-medium text-sm">
+              <Checkbox
+                checked={allShownSelected}
+                disabled={busy || shown.length === 0}
+                indeterminate={someShownSelected && !allShownSelected}
+                onCheckedChange={selectShown}
+              />
+              Select all
+            </label>
+            <span className="text-muted-foreground text-xs">
+              {selectedCount} of {profiles.length} selected
+            </span>
+          </div>
+        </>
+      ) : null}
+      <div className="max-h-80 space-y-1 overflow-y-auto">
+        {profiles.length === 0 ? (
+          <p className="py-4 text-muted-foreground text-sm">
+            No agents in this organization.
+          </p>
+        ) : null}
+        {profiles.length > 0 && shown.length === 0 ? (
+          <p className="py-4 text-center text-muted-foreground text-sm">
+            No agents match.
+          </p>
+        ) : null}
+        {shown.map((profile) => {
+          const state = pluginAgentAccessState(profile, pluginId, data);
+
+          const partial =
+            changes[profile.id] === undefined &&
+            state.assigned > 0 &&
+            !state.full;
+
+          return (
+            <label
+              className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2.5 hover:bg-muted/50"
+              key={profile.id}
+            >
+              <Checkbox
+                checked={changes[profile.id] ?? state.full}
+                disabled={busy}
+                indeterminate={partial}
+                onCheckedChange={(checked) =>
+                  setChanges((current) => ({
+                    ...current,
+                    [profile.id]: checked,
+                  }))
+                }
+              />
+              <ProfileAvatar profile={profile} size="sm" />
+              <span className="min-w-0 flex-1 break-words text-sm">
+                {profile.name}
+              </span>
+              {partial ? (
+                <span className="text-muted-foreground text-xs">
+                  Partial access
+                </span>
+              ) : null}
+            </label>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

@@ -1823,9 +1823,11 @@ export function apply(ctx: Context) {
             {error && <WorkflowError message={error} />}
             {view === "runs" && (
               <RunHistory
+                agent={profiles.find((profile) => profile.id === agentId)}
                 canRun={Boolean(workflow) && !dirty && enabled && !busy}
                 onRunAgain={(input) => runWorkflow(input)}
                 runs={runs}
+                stepIds={steps.map((step) => step.id)}
                 stepNames={Object.fromEntries(
                   allSteps.map((step) => [step.id, title(step.id)])
                 )}
@@ -2422,11 +2424,15 @@ export function apply(ctx: Context) {
 
   function RunHistory({
     runs,
+    agent,
+    stepIds,
     stepNames,
     canRun,
     onRunAgain,
   }: {
     runs: WorkflowRunRecord[];
+    agent?: Profile;
+    stepIds: string[];
     stepNames: Record<string, string>;
     canRun: boolean;
     onRunAgain(input: WorkflowRecord | null): void;
@@ -2477,12 +2483,16 @@ export function apply(ctx: Context) {
                     : group}
                   <span className="workflow-empty">
                     {entries.length === 1 ? "1 run" : `${entries.length} runs`}
-                    {worked > 0 && ` · ${worked} worked`}
+                    {worked > 0 &&
+                      (entries.length === 1
+                        ? " · worked"
+                        : ` · ${worked} worked`)}
                   </span>
                 </h3>
                 <ol className="workflow-day-runs">
                   {entries.map((run) => (
                     <RunRow
+                      agent={agent}
                       canRun={canRun}
                       expanded={run.id === open}
                       key={run.id}
@@ -2492,7 +2502,7 @@ export function apply(ctx: Context) {
                         setOpenId(run.id === open ? null : run.id)
                       }
                       run={run}
-                      stepIds={Object.keys(stepNames)}
+                      stepIds={stepIds}
                     />
                   ))}
                 </ol>
@@ -2506,6 +2516,7 @@ export function apply(ctx: Context) {
 
   function RunRow({
     run,
+    agent,
     stepIds,
     name,
     expanded,
@@ -2514,6 +2525,7 @@ export function apply(ctx: Context) {
     onRunAgain,
   }: {
     run: WorkflowRunRecord;
+    agent?: Profile;
     stepIds: string[];
     name(stepId: string): string;
     expanded: boolean;
@@ -2524,10 +2536,19 @@ export function apply(ctx: Context) {
     const receipts = run.steps ?? [];
     const timeline = runTimeline(run);
     const failed = receipts.find((step) => step.status === "failed");
+    const missingTool = /^Unknown tool: (.+)$/i.exec(run.error ?? "")?.[1];
 
-    const ids = [
-      ...new Set([...stepIds, ...receipts.map((step) => step.stepId)]),
-    ];
+    const missingName = missingTool
+      ? toolParts(missingTool).app || toolParts(missingTool).action
+      : "";
+
+    const recordedIds = receipts
+      .filter((step) => step.kind !== "summarize")
+      .map((step) => step.stepId);
+
+    const ids = recordedIds.some((id) => !stepIds.includes(id))
+      ? recordedIds
+      : stepIds;
 
     const reached = ids.filter((id) => timeline.has(id)).length;
 
@@ -2572,9 +2593,25 @@ export function apply(ctx: Context) {
           <div className="workflow-run-detail">
             <div className="workflow-run-actions">
               {run.error ? (
-                <p role="alert">{readableError(run.error)}</p>
+                <p data-missing-tool={Boolean(missingTool)} role="alert">
+                  {missingTool && agent
+                    ? `${agent.name} does not have the ${missingName} tool.`
+                    : readableError(run.error)}
+                </p>
               ) : (
                 <p className="workflow-empty">{formatRunTime(run.startedAt)}</p>
+              )}
+              {missingTool && agent && (
+                <Button
+                  render={
+                    <a
+                      href={`/profiles?profile=${encodeURIComponent(agent.id)}&section=tools`}
+                    />
+                  }
+                  size="sm"
+                >
+                  Turn on tool
+                </Button>
               )}
               <Button
                 disabled={!canRun}
@@ -2583,35 +2620,38 @@ export function apply(ctx: Context) {
                 type="button"
                 variant="secondary"
               >
-                <Icon kind="play" />
                 Run again
               </Button>
             </div>
-            <ol className="workflow-run-steps">
-              {receipts.map((receipt) => {
-                const duration = timeline.get(receipt.stepId)?.duration;
+            <details className="workflow-run-receipts">
+              <summary>Step details</summary>
+              <ol className="workflow-run-steps">
+                {receipts.map((receipt) => {
+                  const duration = timeline.get(receipt.stepId)?.duration;
 
-                return (
-                  <li data-status={receipt.status} key={receipt.id}>
-                    <details>
-                      <summary>
-                        <span
-                          className="workflow-run-mark"
-                          data-status={receipt.status}
-                        />
-                        <span>{name(receipt.stepId)}</span>
-                        <span className="workflow-empty">
-                          {stepStatusLabels.get(receipt.status) ??
-                            receipt.status}
-                          {duration != null && ` · ${formatDuration(duration)}`}
-                        </span>
-                      </summary>
-                      <StepReceipt receipt={receipt} showError={false} />
-                    </details>
-                  </li>
-                );
-              })}
-            </ol>
+                  return (
+                    <li data-status={receipt.status} key={receipt.id}>
+                      <details>
+                        <summary>
+                          <span
+                            className="workflow-run-mark"
+                            data-status={receipt.status}
+                          />
+                          <span>{name(receipt.stepId)}</span>
+                          <span className="workflow-empty">
+                            {stepStatusLabels.get(receipt.status) ??
+                              receipt.status}
+                            {duration != null &&
+                              ` · ${formatDuration(duration)}`}
+                          </span>
+                        </summary>
+                        <StepReceipt receipt={receipt} showError={false} />
+                      </details>
+                    </li>
+                  );
+                })}
+              </ol>
+            </details>
             {run.status === "completed" && run.output && (
               <section className="workflow-history-result">
                 <h4>Result</h4>
