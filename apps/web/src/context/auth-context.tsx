@@ -460,7 +460,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         revision === authRevision.current &&
         sessionRevision === sessionRequestRevision.current
       ) {
-        resetQueryCache();
+        // Same org, new settings: mark everything stale so the next mount
+        // refetches, but refetch only the overview in place. Refetching every
+        // mounted query makes the settings page flash loading states.
+        void queryClient.invalidateQueries({ refetchType: "none" });
+        void queryClient.invalidateQueries({
+          queryKey: ["organizationOverview"],
+        });
       }
     },
     [

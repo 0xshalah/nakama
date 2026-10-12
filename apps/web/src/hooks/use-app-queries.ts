@@ -533,7 +533,7 @@ const skillsQueryOptions = queryOptions({
 export const automationsQueryOptions = queryOptions({
   queryFn: () => client.listAutomations(),
   queryKey: queryKeys.automations.all,
-  refetchInterval: 30_000,
+  refetchInterval: 60_000,
   staleTime: defaultStaleTime,
 });
 
