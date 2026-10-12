@@ -1,3 +1,4 @@
+import { Tabs } from "@base-ui/react/tabs";
 import type { OrgRole } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card } from "@nakama/ui/card";
@@ -9,13 +10,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@nakama/ui/dialog";
+import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDown01Icon, Tick02Icon } from "hugeicons-react";
 import { type FormEvent, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
-import { OrgMemberPicker } from "@/components/settings/org-member-dialogs";
+import {
+  OrgMemberInviteForm,
+  OrgMemberPicker,
+} from "@/components/settings/org-member-dialogs";
 import { OrgMemberRoleCards } from "@/components/settings/org-member-role-select";
 import { useAuth } from "@/context/use-auth";
 import {
@@ -24,6 +29,7 @@ import {
 } from "@/hooks/use-app-queries";
 import {
   useAddOrgMember,
+  useInviteOrgMember,
   useOrganizationOverview,
   useParentOrgMembers,
 } from "@/hooks/use-org-members";
@@ -31,6 +37,9 @@ import { formatError } from "@/lib/client";
 import { PAGE_PATHS } from "@/lib/navigation";
 import { canArchiveOrganization } from "@/lib/org-archive";
 import { queryKeys } from "@/lib/query-keys";
+
+const dialogTabClass =
+  "whitespace-nowrap rounded-md px-3 py-1.5 text-center font-medium text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm";
 
 type TeamStep = {
   action: string;
@@ -91,9 +100,91 @@ function TeamAddPersonDialog({
   const [selected, setSelected] = useState("");
   const [role, setRole] = useState<OrgRole>("member");
   const [error, setError] = useState<string | null>(null);
+  const [inviting, setInviting] = useState(false);
+  const [tab, setTab] = useState<"create" | "invite">("create");
+  const [createName, setCreateName] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [credentials, setCredentials] = useState<{
+    email: string;
+    temporaryPassword: string;
+  } | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const inviteMutation = useInviteOrgMember(orgId);
+  const noCandidates =
+    candidates.isSuccess && candidates.data.members.length === 0;
+  const showInvite = inviting || noCandidates;
+
+  function handleInvite(event: FormEvent) {
+    event.preventDefault();
+
+    const email = inviteEmail.trim();
+
+    if (!email) {
+      setError("Email is required.");
+
+      return;
+    }
+
+    setError(null);
+    inviteMutation.mutate(
+      { email, role },
+      {
+        onError: (cause) => setError(formatError(cause)),
+        onSuccess: () => {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.organizationOverview(parentOrgId, orgId),
+          });
+          handleOpenChange(false);
+        },
+      }
+    );
+  }
+
+  function handleCreate(event: FormEvent) {
+    event.preventDefault();
+
+    const name = createName.trim();
+    const email = createEmail.trim();
+
+    if (!(name && email)) {
+      setError("Name and email are required.");
+
+      return;
+    }
+
+    setError(null);
+    addMutation.mutate(
+      { email, name, phone: "", role },
+      {
+        onError: (cause) => setError(formatError(cause)),
+        onSuccess: (result) => {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.organizationOverview(parentOrgId, orgId),
+          });
+
+          if (result.temporaryPassword) {
+            setCredentials({
+              email: result.member.email,
+              temporaryPassword: result.temporaryPassword,
+            });
+
+            return;
+          }
+
+          handleOpenChange(false);
+        },
+      }
+    );
+  }
 
   function handleOpenChange(next: boolean) {
     if (!next) {
+      setInviting(false);
+      setTab("create");
+      setCreateName("");
+      setCreateEmail("");
+      setCredentials(null);
+      setInviteEmail("");
       setSelected("");
       setRole("member");
       setError(null);
@@ -144,37 +235,163 @@ function TeamAddPersonDialog({
         <DialogHeader>
           <DialogTitle>Add person</DialogTitle>
         </DialogHeader>
-        <form className="space-y-4" onSubmit={submit}>
-          <OrgMemberPicker
-            disabled={addMutation.isPending}
-            isLoading={candidates.isLoading}
-            members={candidates.data?.members ?? []}
-            name="team-person"
-            onChange={setSelected}
-            value={selected}
-          />
-          <div>
-            <p className="mb-1.5 font-medium text-sm">Role</p>
-            <OrgMemberRoleCards onChange={setRole} value={role} />
-          </div>
-          {(error || candidates.isError) && (
-            <p className="text-destructive text-sm" role="alert">
-              {error ?? formatError(candidates.error)}
-            </p>
-          )}
-          <DialogFooter>
-            <Button
-              onClick={() => handleOpenChange(false)}
-              type="button"
-              variant="outline"
+        {showInvite && (
+          <Tabs.Root
+            onValueChange={(value) => {
+              setError(null);
+              setTab(value as "create" | "invite");
+            }}
+            value={tab}
+          >
+            <Tabs.List
+              aria-label="Add person"
+              className="grid w-fit auto-cols-fr grid-flow-col gap-1 rounded-lg bg-muted p-1"
             >
-              Cancel
-            </Button>
-            <Button disabled={addMutation.isPending || !selected} type="submit">
-              {addMutation.isPending ? "Adding…" : "Add person"}
-            </Button>
-          </DialogFooter>
-        </form>
+              <Tabs.Tab className={dialogTabClass} value="create">
+                Create user
+              </Tabs.Tab>
+              <Tabs.Tab className={dialogTabClass} value="invite">
+                Invite by email
+              </Tabs.Tab>
+            </Tabs.List>
+          </Tabs.Root>
+        )}
+        {showInvite && tab === "invite" && (
+          <div className="-mx-4 -mb-4 overflow-hidden rounded-b-xl">
+            <OrgMemberInviteForm
+              formError={error}
+              inviteEmail={inviteEmail}
+              inviteRole={role}
+              onCancel={() => handleOpenChange(false)}
+              onInviteEmailChange={setInviteEmail}
+              onInviteRoleChange={setRole}
+              onSubmit={handleInvite}
+              pending={inviteMutation.isPending}
+            />
+          </div>
+        )}
+        {showInvite && tab === "create" && credentials && (
+          <div className="space-y-4">
+            <p className="text-muted-foreground text-sm">
+              Share these login details once. They will not be shown again.
+            </p>
+            <p className="text-sm">{credentials.email}</p>
+            <code className="block rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs">
+              {credentials.temporaryPassword}
+            </code>
+            <DialogFooter>
+              <Button onClick={() => handleOpenChange(false)} type="button">
+                Done
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+        {showInvite && tab === "create" && !credentials && (
+          <form className="space-y-4" onSubmit={handleCreate}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  className="mb-1.5 block font-medium text-sm"
+                  htmlFor="team-create-name"
+                >
+                  Name
+                </label>
+                <Input
+                  className="h-10 rounded-xl"
+                  id="team-create-name"
+                  onChange={(event) => setCreateName(event.target.value)}
+                  placeholder="Jane Doe"
+                  required
+                  value={createName}
+                />
+              </div>
+              <div>
+                <label
+                  className="mb-1.5 block font-medium text-sm"
+                  htmlFor="team-create-email"
+                >
+                  Email
+                </label>
+                <Input
+                  className="h-10 rounded-xl"
+                  id="team-create-email"
+                  onChange={(event) => setCreateEmail(event.target.value)}
+                  placeholder="jane@example.com"
+                  required
+                  type="email"
+                  value={createEmail}
+                />
+              </div>
+            </div>
+            <div>
+              <p className="mb-1.5 font-medium text-sm">Role</p>
+              <OrgMemberRoleCards onChange={setRole} value={role} />
+            </div>
+            {error && (
+              <p className="text-destructive text-sm" role="alert">
+                {error}
+              </p>
+            )}
+            <DialogFooter>
+              <Button
+                onClick={() => handleOpenChange(false)}
+                type="button"
+                variant="outline"
+              >
+                Cancel
+              </Button>
+              <Button disabled={addMutation.isPending} type="submit">
+                {addMutation.isPending ? "Creating…" : "Create user"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+        {!showInvite && (
+          <form className="space-y-4" onSubmit={submit}>
+            <OrgMemberPicker
+              disabled={addMutation.isPending}
+              isLoading={candidates.isLoading}
+              members={candidates.data?.members ?? []}
+              name="team-person"
+              onChange={setSelected}
+              value={selected}
+            />
+            <div>
+              <p className="mb-1.5 font-medium text-sm">Role</p>
+              <OrgMemberRoleCards onChange={setRole} value={role} />
+            </div>
+            {(error || candidates.isError) && (
+              <p className="text-destructive text-sm" role="alert">
+                {error ?? formatError(candidates.error)}
+              </p>
+            )}
+            <DialogFooter>
+              <Button
+                onClick={() => {
+                  setError(null);
+                  setInviting(true);
+                }}
+                type="button"
+                variant="ghost"
+              >
+                New user or invite
+              </Button>
+              <Button
+                onClick={() => handleOpenChange(false)}
+                type="button"
+                variant="outline"
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={addMutation.isPending || !selected}
+                type="submit"
+              >
+                {addMutation.isPending ? "Adding…" : "Add person"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
