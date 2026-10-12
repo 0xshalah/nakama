@@ -780,14 +780,25 @@ export interface OrgLlmQuotaStatusResponse {
   warningPercent: number;
 }
 
+export interface OrgUsageLeader {
+  name: string;
+  requestCount: number;
+}
+
 export interface OrgUsageSummaryResponse {
+  /** Every agent by requests, Super Bot excluded. */
+  agents: OrgUsageLeader[];
   /** Estimated spend over the last 30 UTC days. */
   costUsd30d: number;
+  /** Last 30 UTC days, oldest first. */
+  daily: LlmUsageDayStats[];
+  /** Every member by requests. */
+  people: OrgUsageLeader[];
   requests7d: number;
   /** The 7 days before `requests7d`. */
   requestsPrev7d: number;
   /** Agent with the most requests, all time. */
-  topAgent: { name: string; requestCount: number } | null;
+  topAgent: OrgUsageLeader | null;
 }
 
 export interface OrganizationResponse {

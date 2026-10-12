@@ -1,5 +1,9 @@
 import { Tabs } from "@base-ui/react/tabs";
-import type { OrgRole, OrgUsageSummaryResponse } from "@nakama/core/contract";
+import type {
+  OrgRole,
+  OrgUsageLeader,
+  OrgUsageSummaryResponse,
+} from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card } from "@nakama/ui/card";
 import {
@@ -14,14 +18,16 @@ import { Input } from "@nakama/ui/input";
 import { Spinner } from "@nakama/ui/spinner";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDown01Icon, Tick02Icon } from "hugeicons-react";
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
 import {
   OrgMemberInviteForm,
   OrgMemberPicker,
 } from "@/components/settings/org-member-dialogs";
 import { OrgMemberRoleCards } from "@/components/settings/org-member-role-select";
+import { OrgMembersTable } from "@/components/settings/org-members-table";
 import { useAuth } from "@/context/use-auth";
 import {
   useAcpAgentPresetsQuery,
@@ -40,6 +46,7 @@ import { formatError } from "@/lib/client";
 import { PAGE_PATHS } from "@/lib/navigation";
 import { canArchiveOrganization } from "@/lib/org-archive";
 import { queryKeys } from "@/lib/query-keys";
+import { SpendChart } from "@/pages/StatusPage";
 
 const dialogTabClass =
   "whitespace-nowrap rounded-md px-3 py-1.5 text-center font-medium text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow-sm";
@@ -528,6 +535,7 @@ function TeamPeopleAndAgents({
 }) {
   const { data: membersData } = useOrgMembers(orgId);
   const { data: agents } = useOrgProfilesQuery(orgId);
+  const { user } = useAuth();
 
   return (
     <>
@@ -535,17 +543,36 @@ function TeamPeopleAndAgents({
         action="Add person"
         empty="No people yet"
         items={membersData?.members.map((member) => ({
-          detail: member.role,
           id: member.userId,
-          name: member.name?.trim() || member.email,
+          name: member.email,
         }))}
         onAction={onAddPerson}
         title="People"
-      />
+      >
+        <OrgMembersTable
+          currentUserEmail={user?.email}
+          isLoading={false}
+          members={membersData?.members ?? []}
+          removePending={false}
+          updatePending={false}
+        />
+      </TeamList>
       <TeamList
         action="Add agent"
         empty="No agents yet"
-        items={agents?.map((agent) => ({ id: agent.id, name: agent.name }))}
+        items={agents
+          ?.filter((agent) => !agent.isSuper)
+          .map((agent) => ({
+            avatar: (
+              <ProfileAvatar
+                className="rounded-md outline-none"
+                profile={agent}
+                size="sm"
+              />
+            ),
+            id: agent.id,
+            name: agent.name,
+          }))}
         onAction={onAddAgent}
         title="Agents"
       />
@@ -554,40 +581,102 @@ function TeamPeopleAndAgents({
 }
 
 function TeamStats({ usage }: { usage: OrgUsageSummaryResponse }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const change = usage.requests7d - usage.requestsPrev7d;
 
   const stats = [
     {
-      detail: `${change >= 0 ? "+" : ""}${change} vs last week`,
-      label: "Activity this week",
+      detail: `${change >= 0 ? "+" : ""}${change} from last week`,
+      label: "AI calls this week",
       value: usage.requests7d.toLocaleString(),
     },
     {
-      detail: "Estimate",
-      label: "Cost, last 30 days",
+      detail: "Approximate",
+      label: "Spent in the last 30 days",
       value: `$${usage.costUsd30d.toFixed(2)}`,
     },
     {
       detail: usage.topAgent
-        ? `${usage.topAgent.requestCount.toLocaleString()} uses`
+        ? `${usage.topAgent.requestCount.toLocaleString()} AI calls`
         : "Not used yet",
-      label: "Most used agent",
+      label: "Busiest agent",
       value: usage.topAgent?.name ?? "-",
     },
   ];
 
   return (
-    <Card className="grid grid-cols-3 gap-0 divide-x divide-border py-0 shadow-none">
-      {stats.map((stat) => (
-        <div className="min-w-0 px-4 py-2.5" key={stat.label}>
-          <p className="text-muted-foreground text-xs">{stat.label}</p>
-          <p className="truncate font-semibold text-lg">{stat.value}</p>
-          <p className="truncate text-muted-foreground text-xs">
-            {stat.detail}
-          </p>
+    <Card className="gap-0 py-0 shadow-none">
+      <div className="grid grid-cols-3 divide-x divide-border">
+        {stats.map((stat) => (
+          <div className="min-w-0 px-4 py-2.5" key={stat.label}>
+            <p className="text-muted-foreground text-xs">{stat.label}</p>
+            <p className="truncate font-semibold text-lg">{stat.value}</p>
+            <p className="truncate text-muted-foreground text-xs">
+              {stat.detail}
+            </p>
+          </div>
+        ))}
+      </div>
+      {usage.daily.length > 1 ? (
+        <div className="border-border border-t px-4 py-3">
+          <SpendChart
+            daily={usage.daily}
+            metric={(day) => day.estimatedCostUsd}
+            onSelect={setActiveIndex}
+            selected={activeIndex ?? usage.daily.length - 1}
+          />
         </div>
-      ))}
+      ) : null}
+      <div className="grid divide-border border-border border-t sm:grid-cols-2 sm:divide-x">
+        <TeamLeaderboard leaders={usage.people} title="People" />
+        <TeamLeaderboard leaders={usage.agents} title="Agents" />
+      </div>
     </Card>
+  );
+}
+
+function TeamLeaderboard({
+  leaders,
+  title,
+}: {
+  leaders: OrgUsageLeader[];
+  title: string;
+}) {
+  const top = leaders[0]?.requestCount ?? 0;
+
+  return (
+    <div className="min-w-0 space-y-2 px-4 py-3">
+      <h3 className="text-muted-foreground text-xs">{title}</h3>
+      {leaders.length === 0 ? (
+        <p className="text-muted-foreground text-sm">Nobody yet</p>
+      ) : (
+        <ol className="space-y-2">
+          {leaders.map((leader, index) => (
+            <li className="text-sm" key={leader.name}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate">
+                  <span className="mr-2 text-muted-foreground tabular-nums">
+                    {index + 1}
+                  </span>
+                  {leader.name}
+                </span>
+                <span className="shrink-0 text-muted-foreground tabular-nums">
+                  {leader.requestCount.toLocaleString()} AI calls
+                </span>
+              </div>
+              <div className="mt-1 h-1 rounded-full bg-muted">
+                <div
+                  className="h-1 rounded-full bg-primary/60"
+                  style={{
+                    width: `${top > 0 ? (leader.requestCount / top) * 100 : 0}%`,
+                  }}
+                />
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }
 
@@ -597,10 +686,14 @@ function TeamList({
   items,
   onAction,
   title,
+  children,
 }: {
   action: string;
+  children?: ReactNode;
   empty: string;
-  items: { detail?: string; id: string; name: string }[] | undefined;
+  items:
+    | { avatar?: ReactNode; detail?: string; id: string; name: string }[]
+    | undefined;
   onAction: () => void;
   title: string;
 }) {
@@ -615,19 +708,25 @@ function TeamList({
           {action}
         </Button>
       </div>
+      {children && items && items.length > 0 ? (
+        <div className="border-border border-t">{children}</div>
+      ) : null}
       {items?.length === 0 && (
         <p className="border-border border-t px-4 py-2.5 text-muted-foreground text-sm">
           {empty}
         </p>
       )}
-      {items && items.length > 0 && (
+      {!children && items && items.length > 0 && (
         <ul className="divide-y divide-border border-border border-t">
           {items.map((item) => (
             <li
               className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
               key={item.id}
             >
-              <span className="min-w-0 truncate font-medium">{item.name}</span>
+              <span className="flex min-w-0 items-center gap-2.5">
+                {item.avatar}
+                <span className="truncate font-medium">{item.name}</span>
+              </span>
               {item.detail && (
                 <span className="shrink-0 text-muted-foreground">
                   {item.detail}
@@ -737,17 +836,6 @@ function TeamBreadcrumb({ name }: { name: string }) {
       className="flex flex-wrap items-center pb-3 text-sm"
     >
       <ol className="flex min-w-0 flex-wrap items-center gap-2">
-        <li>
-          <Link
-            className="text-muted-foreground transition-colors hover:text-foreground"
-            to={PAGE_PATHS.organization}
-          >
-            Organization
-          </Link>
-        </li>
-        <li aria-hidden className="text-muted-foreground/60">
-          /
-        </li>
         <li>
           <Link
             className="text-muted-foreground transition-colors hover:text-foreground"

@@ -10,6 +10,7 @@ import type {
   OrgLlmQuotaStatusResponse,
   OrgMemberResponse,
   OrgSharedResourceResponse,
+  OrgUsageLeader,
   OrgUsageSummaryResponse,
   ProfileResponse,
 } from "@nakama/core/contract";
@@ -909,23 +910,53 @@ export function registerOrgMemberRoutes(
       return errorResponse("Not found", 404);
     }
 
-    const [daily, byActor] = await Promise.all([
+    if (!orgService) {
+      return errorResponse("Organization service not configured", 500);
+    }
+
+    const [daily, byActor, profiles, { members }] = await Promise.all([
       options.agent.getLlmUsageDailyStats(orgId),
       options.agent.getLlmUsageStatsByActor(orgId),
+      options.databaseAdapter?.listProfilesForOrg(orgId) ?? [],
+      orgService.listMembers(orgId),
     ]);
     const sumRequests = (days: typeof daily) =>
       days.reduce((total, day) => total + day.requestCount, 0);
-    const topAgent = byActor.agents
-      .filter((agent) => agent.name && agent.requestCount > 0)
-      .sort((a, b) => b.requestCount - a.requestCount)[0];
+    // Everyone is listed, so quiet people and agents show up with 0 calls.
+    const rank = (
+      roster: { id: string; name: string }[],
+      groups: typeof byActor.agents
+    ): OrgUsageLeader[] => {
+      const counts = new Map(
+        groups.map((group) => [group.id, group.requestCount])
+      );
+
+      return roster
+        .map(({ id, name }) => ({ name, requestCount: counts.get(id) ?? 0 }))
+        .sort((a, b) => b.requestCount - a.requestCount);
+    };
+    const agents = rank(
+      profiles
+        .filter((profile) => !profile.isSuper)
+        .map((profile) => ({ id: profile.id, name: profile.name })),
+      byActor.agents
+    );
+    const topAgent = agents.find((agent) => agent.requestCount > 0);
 
     return json<OrgUsageSummaryResponse>({
+      agents,
       costUsd30d: daily.reduce((total, day) => total + day.estimatedCostUsd, 0),
+      daily,
+      people: rank(
+        members.map((member) => ({
+          id: member.userId,
+          name: member.name?.trim() || member.email,
+        })),
+        byActor.users
+      ),
       requests7d: sumRequests(daily.slice(-7)),
       requestsPrev7d: sumRequests(daily.slice(-14, -7)),
-      topAgent: topAgent
-        ? { name: topAgent.name ?? "", requestCount: topAgent.requestCount }
-        : null,
+      topAgent: topAgent ?? null,
     });
   });
 
