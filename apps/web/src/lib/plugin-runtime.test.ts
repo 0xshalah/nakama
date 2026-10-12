@@ -125,9 +125,9 @@ describe("native plugin activation", () => {
             const value =
               index < initialStates.length
                 ? initialStates[index]
-                : index === 14 && selection === "data"
+                : index === 16 && selection === "data"
                   ? "data"
-                  : index === 15 && selection === "summary"
+                  : index === 17 && selection === "summary"
                     ? "summary"
                     : initial;
 
@@ -148,7 +148,7 @@ describe("native plugin activation", () => {
         expect(html).toContain("Create your first workflow");
         expect(html).toContain("Create workflow");
         expect(html).not.toContain("<form");
-        expect(html).not.toContain("Test run");
+        expect(html).not.toContain("Try it");
 
         return;
       }
@@ -169,13 +169,13 @@ describe("native plugin activation", () => {
       expect(html).toContain('role="switch"');
       expect(html).toContain('data-slot="select-trigger"');
       expect(html).toContain('data-slot="input"');
-      expect(html).toMatch(/<button[^>]*>.*?Test run<\/button>/s);
+      expect(html).toMatch(/<button[^>]*>.*?Try it<\/button>/s);
       expect(html).not.toContain('type="submit"');
 
       if (selection === "data") {
         expect(html).toContain('aria-label="Workflow data"');
         expect(html).toContain('aria-label="Workflow views"');
-        expect(html).toContain('aria-busy="true"');
+        expect(html).toMatch(/role="status"[^>]*>Loading data/);
         expect(html).not.toContain('role="dialog"');
         expect(html).not.toContain('aria-label="Step views"');
 
