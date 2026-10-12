@@ -147,6 +147,7 @@ import type {
   OrgPluginDetail,
   OrgPluginSummary,
   OrgSharedResourceResponse,
+  OrgUsageSummaryResponse,
   PasskeyAuthenticationOptionsResponse,
   PasskeyCredentialResponse,
   PasskeyRegistrationOptionsResponse,
@@ -3145,6 +3146,15 @@ export class NakamaClient {
     );
   }
 
+  async getOrganizationUsageSummary(
+    orgId: string
+  ): Promise<OrgUsageSummaryResponse> {
+    return this.request<OrgUsageSummaryResponse>(
+      `/v1/orgs/${encodeURIComponent(orgId)}/usage-summary`,
+      { headers: { "X-Org-Id": orgId } }
+    );
+  }
+
   async getOrganizationLlmQuotaStatus(
     orgId: string
   ): Promise<OrgLlmQuotaStatusResponse> {
@@ -3415,7 +3425,8 @@ export class NakamaClient {
 
   async listOrgMembers(orgId: string): Promise<ListOrgMembersResponse> {
     return this.request<ListOrgMembersResponse>(
-      `/v1/orgs/${encodeURIComponent(orgId)}/members`
+      `/v1/orgs/${encodeURIComponent(orgId)}/members`,
+      { headers: { "X-Org-Id": orgId } }
     );
   }
 

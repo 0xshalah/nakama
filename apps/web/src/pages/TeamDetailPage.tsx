@@ -1,5 +1,5 @@
 import { Tabs } from "@base-ui/react/tabs";
-import type { OrgRole } from "@nakama/core/contract";
+import type { OrgRole, OrgUsageSummaryResponse } from "@nakama/core/contract";
 import { Button } from "@nakama/ui/button";
 import { Card } from "@nakama/ui/card";
 import {
@@ -25,12 +25,15 @@ import { OrgMemberRoleCards } from "@/components/settings/org-member-role-select
 import { useAuth } from "@/context/use-auth";
 import {
   useAcpAgentPresetsQuery,
+  useOrgProfilesQuery,
   useToolsQuery,
 } from "@/hooks/use-app-queries";
 import {
   useAddOrgMember,
   useInviteOrgMember,
   useOrganizationOverview,
+  useOrgMembers,
+  useOrgUsageSummary,
   useParentOrgMembers,
 } from "@/hooks/use-org-members";
 import { formatError } from "@/lib/client";
@@ -54,8 +57,8 @@ function ProgressRing({ done, total }: { done: number; total: number }) {
   const circumference = 2 * Math.PI * radius;
 
   return (
-    <div className="relative size-14 shrink-0">
-      <svg aria-hidden className="size-14 -rotate-90" viewBox="0 0 48 48">
+    <div className="relative size-11 shrink-0">
+      <svg aria-hidden className="size-11 -rotate-90" viewBox="0 0 48 48">
         <circle
           className="stroke-muted"
           cx="24"
@@ -76,10 +79,148 @@ function ProgressRing({ done, total }: { done: number; total: number }) {
           strokeWidth="4"
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center font-semibold text-sm">
+      <span className="absolute inset-0 flex items-center justify-center font-semibold text-xs">
         {done}/{total}
       </span>
     </div>
+  );
+}
+
+function TeamCreateUserPane({
+  onClose,
+  onRoleChange,
+  orgId,
+  parentOrgId,
+  role,
+}: {
+  onClose: () => void;
+  onRoleChange: (role: OrgRole) => void;
+  orgId: string;
+  parentOrgId: string;
+  role: OrgRole;
+}) {
+  const queryClient = useQueryClient();
+  const addMutation = useAddOrgMember(orgId);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const [credentials, setCredentials] = useState<{
+    email: string;
+    temporaryPassword: string;
+  } | null>(null);
+
+  function handleCreate(event: FormEvent) {
+    event.preventDefault();
+
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+
+    if (!(trimmedName && trimmedEmail)) {
+      setError("Name and email are required.");
+
+      return;
+    }
+
+    setError(null);
+    addMutation.mutate(
+      { email: trimmedEmail, name: trimmedName, phone: "", role },
+      {
+        onError: (cause) => setError(formatError(cause)),
+        onSuccess: (result) => {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.organizationOverview(parentOrgId, orgId),
+          });
+
+          if (result.temporaryPassword) {
+            setCredentials({
+              email: result.member.email,
+              temporaryPassword: result.temporaryPassword,
+            });
+
+            return;
+          }
+
+          onClose();
+        },
+      }
+    );
+  }
+
+  if (credentials) {
+    return (
+      <div className="space-y-4">
+        <p className="text-muted-foreground text-sm">
+          Share these login details once. They will not be shown again.
+        </p>
+        <p className="text-sm">{credentials.email}</p>
+        <code className="block rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs">
+          {credentials.temporaryPassword}
+        </code>
+        <DialogFooter>
+          <Button onClick={onClose} type="button">
+            Done
+          </Button>
+        </DialogFooter>
+      </div>
+    );
+  }
+
+  return (
+    <form className="space-y-4" onSubmit={handleCreate}>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label
+            className="mb-1.5 block font-medium text-sm"
+            htmlFor="team-create-name"
+          >
+            Name
+          </label>
+          <Input
+            className="h-10 rounded-xl"
+            id="team-create-name"
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Jane Doe"
+            required
+            value={name}
+          />
+        </div>
+        <div>
+          <label
+            className="mb-1.5 block font-medium text-sm"
+            htmlFor="team-create-email"
+          >
+            Email
+          </label>
+          <Input
+            className="h-10 rounded-xl"
+            id="team-create-email"
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="jane@example.com"
+            required
+            type="email"
+            value={email}
+          />
+        </div>
+      </div>
+      <div>
+        <p className="mb-1.5 font-medium text-sm">Role</p>
+        <OrgMemberRoleCards onChange={onRoleChange} value={role} />
+      </div>
+      {error && (
+        <p className="text-destructive text-sm" role="alert">
+          {error}
+        </p>
+      )}
+      <DialogFooter>
+        <Button onClick={onClose} type="button" variant="outline">
+          Cancel
+        </Button>
+        <Button disabled={addMutation.isPending} type="submit">
+          {addMutation.isPending ? "Creating…" : "Create user"}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }
 
@@ -102,16 +243,12 @@ function TeamAddPersonDialog({
   const [error, setError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
   const [tab, setTab] = useState<"create" | "invite">("create");
-  const [createName, setCreateName] = useState("");
-  const [createEmail, setCreateEmail] = useState("");
-  const [credentials, setCredentials] = useState<{
-    email: string;
-    temporaryPassword: string;
-  } | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const inviteMutation = useInviteOrgMember(orgId);
+
   const noCandidates =
     candidates.isSuccess && candidates.data.members.length === 0;
+
   const showInvite = inviting || noCandidates;
 
   function handleInvite(event: FormEvent) {
@@ -140,50 +277,10 @@ function TeamAddPersonDialog({
     );
   }
 
-  function handleCreate(event: FormEvent) {
-    event.preventDefault();
-
-    const name = createName.trim();
-    const email = createEmail.trim();
-
-    if (!(name && email)) {
-      setError("Name and email are required.");
-
-      return;
-    }
-
-    setError(null);
-    addMutation.mutate(
-      { email, name, phone: "", role },
-      {
-        onError: (cause) => setError(formatError(cause)),
-        onSuccess: (result) => {
-          void queryClient.invalidateQueries({
-            queryKey: queryKeys.organizationOverview(parentOrgId, orgId),
-          });
-
-          if (result.temporaryPassword) {
-            setCredentials({
-              email: result.member.email,
-              temporaryPassword: result.temporaryPassword,
-            });
-
-            return;
-          }
-
-          handleOpenChange(false);
-        },
-      }
-    );
-  }
-
   function handleOpenChange(next: boolean) {
     if (!next) {
       setInviting(false);
       setTab("create");
-      setCreateName("");
-      setCreateEmail("");
-      setCredentials(null);
       setInviteEmail("");
       setSelected("");
       setRole("member");
@@ -239,7 +336,7 @@ function TeamAddPersonDialog({
           <Tabs.Root
             onValueChange={(value) => {
               setError(null);
-              setTab(value as "create" | "invite");
+              setTab(value === "invite" ? "invite" : "create");
             }}
             value={tab}
           >
@@ -270,81 +367,14 @@ function TeamAddPersonDialog({
             />
           </div>
         )}
-        {showInvite && tab === "create" && credentials && (
-          <div className="space-y-4">
-            <p className="text-muted-foreground text-sm">
-              Share these login details once. They will not be shown again.
-            </p>
-            <p className="text-sm">{credentials.email}</p>
-            <code className="block rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs">
-              {credentials.temporaryPassword}
-            </code>
-            <DialogFooter>
-              <Button onClick={() => handleOpenChange(false)} type="button">
-                Done
-              </Button>
-            </DialogFooter>
-          </div>
-        )}
-        {showInvite && tab === "create" && !credentials && (
-          <form className="space-y-4" onSubmit={handleCreate}>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label
-                  className="mb-1.5 block font-medium text-sm"
-                  htmlFor="team-create-name"
-                >
-                  Name
-                </label>
-                <Input
-                  className="h-10 rounded-xl"
-                  id="team-create-name"
-                  onChange={(event) => setCreateName(event.target.value)}
-                  placeholder="Jane Doe"
-                  required
-                  value={createName}
-                />
-              </div>
-              <div>
-                <label
-                  className="mb-1.5 block font-medium text-sm"
-                  htmlFor="team-create-email"
-                >
-                  Email
-                </label>
-                <Input
-                  className="h-10 rounded-xl"
-                  id="team-create-email"
-                  onChange={(event) => setCreateEmail(event.target.value)}
-                  placeholder="jane@example.com"
-                  required
-                  type="email"
-                  value={createEmail}
-                />
-              </div>
-            </div>
-            <div>
-              <p className="mb-1.5 font-medium text-sm">Role</p>
-              <OrgMemberRoleCards onChange={setRole} value={role} />
-            </div>
-            {error && (
-              <p className="text-destructive text-sm" role="alert">
-                {error}
-              </p>
-            )}
-            <DialogFooter>
-              <Button
-                onClick={() => handleOpenChange(false)}
-                type="button"
-                variant="outline"
-              >
-                Cancel
-              </Button>
-              <Button disabled={addMutation.isPending} type="submit">
-                {addMutation.isPending ? "Creating…" : "Create user"}
-              </Button>
-            </DialogFooter>
-          </form>
+        {showInvite && tab === "create" && (
+          <TeamCreateUserPane
+            onClose={() => handleOpenChange(false)}
+            onRoleChange={setRole}
+            orgId={orgId}
+            parentOrgId={parentOrgId}
+            role={role}
+          />
         )}
         {!showInvite && (
           <form className="space-y-4" onSubmit={submit}>
@@ -407,17 +437,17 @@ function ReadinessCard({
 }: {
   busy: boolean;
   doneCount: number;
-  nextStep: TeamStep | undefined;
+  nextStep: TeamStep;
   onOpen: (open: () => void) => void;
   steps: TeamStep[];
   total: number;
 }) {
   return (
     <Card className="gap-0 overflow-hidden py-0 shadow-none">
-      <div className="flex items-center gap-4 px-6 py-5">
+      <div className="flex items-center gap-4 px-4 py-3">
         <ProgressRing done={doneCount} total={total} />
-        <div className="space-y-0.5">
-          <h3 className="font-semibold text-lg">Get your team ready</h3>
+        <div className="space-y-0">
+          <h3 className="font-semibold">Get your team ready</h3>
           <p className="text-muted-foreground text-sm">
             {total - doneCount === 0
               ? "All steps done"
@@ -426,9 +456,9 @@ function ReadinessCard({
         </div>
       </div>
       <ul className="divide-y divide-border border-border border-t">
-        <li className="flex items-center gap-4 px-6 py-4 text-muted-foreground">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <Tick02Icon aria-hidden className="size-4" />
+        <li className="flex items-center gap-3 px-4 py-2.5 text-muted-foreground">
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <Tick02Icon aria-hidden className="size-3.5" />
           </span>
           <span className="line-through">Create your team</span>
         </li>
@@ -437,17 +467,17 @@ function ReadinessCard({
 
           return (
             <li
-              className={`flex items-center gap-4 px-6 py-4 ${active ? "bg-primary/5" : ""}`}
+              className={`flex items-center gap-3 px-4 py-2.5 ${active ? "bg-primary/5" : ""}`}
               key={step.title}
             >
               {step.done ? (
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                  <Tick02Icon aria-hidden className="size-4" />
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <Tick02Icon aria-hidden className="size-3.5" />
                 </span>
               ) : (
                 <span
                   aria-hidden
-                  className={`flex size-7 shrink-0 items-center justify-center rounded-full border-2 font-semibold text-xs ${active ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
+                  className={`flex size-6 shrink-0 items-center justify-center rounded-full border-2 font-semibold text-xs ${active ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
                 >
                   {index + 2}
                 </span>
@@ -472,6 +502,7 @@ function ReadinessCard({
                 <Button
                   disabled={busy}
                   onClick={() => onOpen(step.onOpen)}
+                  size="sm"
                   type="button"
                   variant={active ? "default" : "outline"}
                 >
@@ -482,6 +513,130 @@ function ReadinessCard({
           );
         })}
       </ul>
+    </Card>
+  );
+}
+
+function TeamPeopleAndAgents({
+  onAddAgent,
+  onAddPerson,
+  orgId,
+}: {
+  onAddAgent: () => void;
+  onAddPerson: () => void;
+  orgId: string;
+}) {
+  const { data: membersData } = useOrgMembers(orgId);
+  const { data: agents } = useOrgProfilesQuery(orgId);
+
+  return (
+    <>
+      <TeamList
+        action="Add person"
+        empty="No people yet"
+        items={membersData?.members.map((member) => ({
+          detail: member.role,
+          id: member.userId,
+          name: member.name?.trim() || member.email,
+        }))}
+        onAction={onAddPerson}
+        title="People"
+      />
+      <TeamList
+        action="Add agent"
+        empty="No agents yet"
+        items={agents?.map((agent) => ({ id: agent.id, name: agent.name }))}
+        onAction={onAddAgent}
+        title="Agents"
+      />
+    </>
+  );
+}
+
+function TeamStats({ usage }: { usage: OrgUsageSummaryResponse }) {
+  const change = usage.requests7d - usage.requestsPrev7d;
+
+  const stats = [
+    {
+      detail: `${change >= 0 ? "+" : ""}${change} vs last week`,
+      label: "Activity this week",
+      value: usage.requests7d.toLocaleString(),
+    },
+    {
+      detail: "Estimate",
+      label: "Cost, last 30 days",
+      value: `$${usage.costUsd30d.toFixed(2)}`,
+    },
+    {
+      detail: usage.topAgent
+        ? `${usage.topAgent.requestCount.toLocaleString()} uses`
+        : "Not used yet",
+      label: "Most used agent",
+      value: usage.topAgent?.name ?? "-",
+    },
+  ];
+
+  return (
+    <Card className="grid grid-cols-3 gap-0 divide-x divide-border py-0 shadow-none">
+      {stats.map((stat) => (
+        <div className="min-w-0 px-4 py-2.5" key={stat.label}>
+          <p className="text-muted-foreground text-xs">{stat.label}</p>
+          <p className="truncate font-semibold text-lg">{stat.value}</p>
+          <p className="truncate text-muted-foreground text-xs">
+            {stat.detail}
+          </p>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function TeamList({
+  action,
+  empty,
+  items,
+  onAction,
+  title,
+}: {
+  action: string;
+  empty: string;
+  items: { detail?: string; id: string; name: string }[] | undefined;
+  onAction: () => void;
+  title: string;
+}) {
+  return (
+    <Card className="gap-0 overflow-hidden py-0 shadow-none">
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+        <h3 className="font-semibold">
+          {title}
+          {items ? ` (${items.length})` : ""}
+        </h3>
+        <Button onClick={onAction} size="sm" type="button" variant="outline">
+          {action}
+        </Button>
+      </div>
+      {items?.length === 0 && (
+        <p className="border-border border-t px-4 py-2.5 text-muted-foreground text-sm">
+          {empty}
+        </p>
+      )}
+      {items && items.length > 0 && (
+        <ul className="divide-y divide-border border-border border-t">
+          {items.map((item) => (
+            <li
+              className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+              key={item.id}
+            >
+              <span className="min-w-0 truncate font-medium">{item.name}</span>
+              {item.detail && (
+                <span className="shrink-0 text-muted-foreground">
+                  {item.detail}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }
@@ -631,21 +786,90 @@ function TeamMissing({ loading }: { loading: boolean }) {
   );
 }
 
-export function TeamDetailPage() {
-  const { teamId } = useParams();
-  const { activeOrg, archiveOrg, switchOrg, user } = useAuth();
+function TeamAdminCard({
+  team,
+}: {
+  team: { id: string; name: string; slug: string };
+}) {
+  const { archiveOrg, user } = useAuth();
   const navigate = useNavigate();
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const running = useRef(false);
-  const [addOpen, setAddOpen] = useState(false);
-  const [addAgentOpen, setAddAgentOpen] = useState(false);
-  const { data: tools = [] } = useToolsQuery();
-  const { data: agentPresets = [] } = useAcpAgentPresetsQuery();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  async function deleteTeam() {
+    setDeleting(true);
+    setDeleteError(null);
+
+    try {
+      await archiveOrg(team.id);
+      setDeleteOpen(false);
+      navigate(PAGE_PATHS.organization);
+    } catch (cause) {
+      setDeleteError(formatError(cause));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <>
+      <Card className="gap-0 py-0 shadow-none">
+        <details className="group">
+          <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-2.5">
+            <span className="font-semibold">Technical details</span>
+            <span className="flex items-center gap-2 text-muted-foreground text-sm">
+              For admins and support
+              <ArrowDown01Icon
+                aria-hidden
+                className="size-4 transition-transform group-open:rotate-180"
+              />
+            </span>
+          </summary>
+          <dl className="space-y-2 border-border border-t px-4 py-2.5 text-sm">
+            <div>
+              <dt className="text-muted-foreground">Team ID</dt>
+              <dd className="break-all font-mono text-xs">{team.id}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Slug</dt>
+              <dd className="break-words">{team.slug}</dd>
+            </div>
+          </dl>
+        </details>
+        {canArchiveOrganization(user?.isPlatformAdmin === true) && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-border border-t px-4 py-2.5">
+            <h3 className="font-semibold">Delete team</h3>
+            <Button
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteOpen(true);
+              }}
+              size="sm"
+              type="button"
+              variant="destructive"
+            >
+              Delete
+            </Button>
+          </div>
+        )}
+      </Card>
+      <DeleteTeamDialog
+        deleting={deleting}
+        error={deleteError}
+        onConfirm={() => void deleteTeam()}
+        onOpenChange={setDeleteOpen}
+        open={deleteOpen}
+        teamName={team.name}
+      />
+    </>
+  );
+}
+
+function useTeam(
+  teamId: string | undefined,
+  activeOrg: { id: string; parentOrgId?: string | null } | null | undefined
+) {
   const overview = useOrganizationOverview(
     activeOrg?.id ?? null,
     activeOrg?.parentOrgId ?? null
@@ -658,42 +882,51 @@ export function TeamDetailPage() {
     setLastTeam(foundTeam);
   }
 
-  const team = foundTeam ?? (lastTeam?.id === teamId ? lastTeam : undefined);
+  return {
+    loading: overview.isLoading,
+    team: foundTeam ?? (lastTeam?.id === teamId ? lastTeam : undefined),
+  };
+}
+
+export function TeamDetailPage() {
+  const { teamId } = useParams();
+  const { activeOrg, switchOrg } = useAuth();
+  const navigate = useNavigate();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const running = useRef(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addAgentOpen, setAddAgentOpen] = useState(false);
+  const { data: tools = [] } = useToolsQuery();
+  const { data: agentPresets = [] } = useAcpAgentPresetsQuery();
+
+  const { loading, team } = useTeam(teamId, activeOrg);
+  const { data: usage } = useOrgUsageSummary(team?.id ?? null);
 
   if (!team) {
-    return <TeamMissing loading={overview.isLoading} />;
+    return <TeamMissing loading={loading} />;
   }
 
   const canWork = team.isCurrent || team.canSwitch;
+
+  const showAddPerson = () => setAddOpen(true);
+  const showAddAgent = () => setAddAgentOpen(true);
+  const addActions = { agent: showAddAgent, person: showAddPerson };
 
   const steps: TeamStep[] = [
     {
       action: "Add person",
       description: "So they can work with the team",
       done: team.memberCount > 1,
-      onOpen: () => setAddOpen(true),
+      onOpen: showAddPerson,
       title: "Invite your teammates",
     },
     {
       action: "Add agent",
       description: "An AI helper that does tasks for the team",
       done: team.localResourceCounts.agents > 0,
-      onOpen: () => setAddAgentOpen(true),
+      onOpen: showAddAgent,
       title: "Add your first agent",
-    },
-    {
-      action: "Add knowledge",
-      description: "Knowledge your agents can read",
-      done: team.localResourceCounts.knowledge > 0,
-      onOpen: () => navigate(PAGE_PATHS.profiles),
-      title: "Share documents and notes",
-    },
-    {
-      action: "Add skill",
-      description: "Step-by-step know-how agents can follow",
-      done: team.localResourceCounts.skills > 0,
-      onOpen: () => navigate(PAGE_PATHS.skills),
-      title: "Teach a skill",
     },
   ];
 
@@ -724,27 +957,8 @@ export function TeamDetailPage() {
     }
   }
 
-  async function deleteTeam() {
-    if (!team) {
-      return;
-    }
-
-    setDeleting(true);
-    setDeleteError(null);
-
-    try {
-      await archiveOrg(team.id);
-      setDeleteOpen(false);
-      navigate(PAGE_PATHS.organization);
-    } catch (cause) {
-      setDeleteError(formatError(cause));
-    } finally {
-      setDeleting(false);
-    }
-  }
-
   return (
-    <section className="mx-auto min-w-0 max-w-3xl space-y-8">
+    <section className="mx-auto min-w-0 max-w-3xl space-y-5">
       <TeamHeader
         busy={pending}
         onWork={() => void openIn(() => navigate(PAGE_PATHS.chat))}
@@ -756,61 +970,23 @@ export function TeamDetailPage() {
           {error}
         </p>
       )}
-      <ReadinessCard
-        busy={pending || !canWork}
-        doneCount={doneCount}
-        nextStep={nextStep}
-        onOpen={(open) => void openIn(open)}
-        steps={steps}
-        total={total}
+      {nextStep && (
+        <ReadinessCard
+          busy={pending || !canWork}
+          doneCount={doneCount}
+          nextStep={nextStep}
+          onOpen={(open) => void openIn(open)}
+          steps={steps}
+          total={total}
+        />
+      )}
+      {usage && <TeamStats usage={usage} />}
+      <TeamPeopleAndAgents
+        onAddAgent={() => void openIn(addActions.agent)}
+        onAddPerson={() => void openIn(addActions.person)}
+        orgId={team.id}
       />
-      <Card className="gap-0 py-0 shadow-none">
-        <details className="group">
-          <summary className="flex cursor-pointer items-center justify-between gap-3 px-6 py-4">
-            <span className="font-semibold">Technical details</span>
-            <span className="flex items-center gap-2 text-muted-foreground text-sm">
-              For admins and support
-              <ArrowDown01Icon
-                aria-hidden
-                className="size-4 transition-transform group-open:rotate-180"
-              />
-            </span>
-          </summary>
-          <dl className="space-y-2 border-border border-t px-6 py-4 text-sm">
-            <div>
-              <dt className="text-muted-foreground">Team ID</dt>
-              <dd className="break-all font-mono text-xs">{team.id}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Slug</dt>
-              <dd className="break-words">{team.slug}</dd>
-            </div>
-          </dl>
-        </details>
-        {canArchiveOrganization(user?.isPlatformAdmin === true) && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-border border-t px-6 py-4">
-            <h3 className="font-semibold">Delete team</h3>
-            <Button
-              onClick={() => {
-                setDeleteError(null);
-                setDeleteOpen(true);
-              }}
-              type="button"
-              variant="destructive"
-            >
-              Delete
-            </Button>
-          </div>
-        )}
-      </Card>
-      <DeleteTeamDialog
-        deleting={deleting}
-        error={deleteError}
-        onConfirm={() => void deleteTeam()}
-        onOpenChange={setDeleteOpen}
-        open={deleteOpen}
-        teamName={team.name}
-      />
+      <TeamAdminCard team={team} />
       <ProfileCreateDialog
         agentPresets={agentPresets}
         onCreated={() => undefined}

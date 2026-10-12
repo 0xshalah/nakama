@@ -601,6 +601,15 @@ export function useProfilesQuery(orgId?: string | null) {
   });
 }
 
+export function useOrgProfilesQuery(orgId: string | null) {
+  return useQuery({
+    enabled: Boolean(orgId),
+    queryFn: async () => (await client.listProfiles(orgId ?? "")).profiles,
+    queryKey: [...queryKeys.profiles.all, "org", orgId] as const,
+    staleTime: defaultStaleTime,
+  });
+}
+
 export function useProfileQuery(profileId: string | null) {
   return useQuery({
     ...profileQueryOptions(profileId ?? ""),

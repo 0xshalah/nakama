@@ -780,6 +780,16 @@ export interface OrgLlmQuotaStatusResponse {
   warningPercent: number;
 }
 
+export interface OrgUsageSummaryResponse {
+  /** Estimated spend over the last 30 UTC days. */
+  costUsd30d: number;
+  requests7d: number;
+  /** The 7 days before `requests7d`. */
+  requestsPrev7d: number;
+  /** Agent with the most requests, all time. */
+  topAgent: { name: string; requestCount: number } | null;
+}
+
 export interface OrganizationResponse {
   organization: OrganizationSummary;
 }

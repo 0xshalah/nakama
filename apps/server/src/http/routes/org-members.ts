@@ -10,6 +10,7 @@ import type {
   OrgLlmQuotaStatusResponse,
   OrgMemberResponse,
   OrgSharedResourceResponse,
+  OrgUsageSummaryResponse,
   ProfileResponse,
 } from "@nakama/core/contract";
 import { OrgUsageQuotaService } from "../../services/org-usage-quota-service";
@@ -898,6 +899,34 @@ export function registerOrgMemberRoutes(
     ).getStatus(orgId);
 
     return json<OrgLlmQuotaStatusResponse>(quota);
+  });
+
+  app.get("/v1/orgs/:orgId/usage-summary", async (c) => {
+    const auth = requireOrgAdminFromContext(c);
+    const orgId = decodeURIComponent(c.req.param("orgId"));
+
+    if (auth.activeOrgId !== orgId) {
+      return errorResponse("Not found", 404);
+    }
+
+    const [daily, byActor] = await Promise.all([
+      options.agent.getLlmUsageDailyStats(orgId),
+      options.agent.getLlmUsageStatsByActor(orgId),
+    ]);
+    const sumRequests = (days: typeof daily) =>
+      days.reduce((total, day) => total + day.requestCount, 0);
+    const topAgent = byActor.agents
+      .filter((agent) => agent.name && agent.requestCount > 0)
+      .sort((a, b) => b.requestCount - a.requestCount)[0];
+
+    return json<OrgUsageSummaryResponse>({
+      costUsd30d: daily.reduce((total, day) => total + day.estimatedCostUsd, 0),
+      requests7d: sumRequests(daily.slice(-7)),
+      requestsPrev7d: sumRequests(daily.slice(-14, -7)),
+      topAgent: topAgent
+        ? { name: topAgent.name ?? "", requestCount: topAgent.requestCount }
+        : null,
+    });
   });
 
   app.openAPIRegistry.registerPath(
