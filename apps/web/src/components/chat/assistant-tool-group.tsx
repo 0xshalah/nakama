@@ -470,8 +470,14 @@ function ToolOnlyWorkGroup({
   modelLabel?: string | null;
   profileId?: string | null;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(isWorkActive);
+  const [wasWorkActive, setWasWorkActive] = useState(isWorkActive);
   const elapsedSeconds = useWorkDuration(isWorkActive, tools);
+
+  if (wasWorkActive !== isWorkActive) {
+    setWasWorkActive(isWorkActive);
+    setOpen(isWorkActive);
+  }
 
   const done = !isWorkActive;
   const expanded = open;

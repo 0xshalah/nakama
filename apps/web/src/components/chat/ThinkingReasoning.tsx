@@ -176,7 +176,13 @@ function useThinkingCollapse(
 ) {
   const [done, setDone] = useState(!isWorkActive && hasBody);
   const [thinkingOpen, setThinkingOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(true);
+  const [toolsOpen, setToolsOpen] = useState(isWorkActive);
+  const [wasWorkActive, setWasWorkActive] = useState(isWorkActive);
+
+  if (wasWorkActive !== isWorkActive) {
+    setWasWorkActive(isWorkActive);
+    setToolsOpen(isWorkActive);
+  }
 
   useEffect(() => {
     if (isWorkActive) {
