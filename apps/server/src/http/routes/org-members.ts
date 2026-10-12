@@ -20,6 +20,7 @@ import {
   requireOrgAdminFromContext,
   requireOrgAdminOrPlatformAdminFromContext,
   requireOrgMember,
+  requireOrgMemberFromContext,
 } from "../org-guards";
 import { errorResponse, getRequestAuth, json, readJson } from "../shared";
 import type { HonoApp } from "../types";
@@ -903,7 +904,7 @@ export function registerOrgMemberRoutes(
   });
 
   app.get("/v1/orgs/:orgId/usage-summary", async (c) => {
-    const auth = requireOrgAdminFromContext(c);
+    const auth = requireOrgMemberFromContext(c);
     const orgId = decodeURIComponent(c.req.param("orgId"));
 
     if (auth.activeOrgId !== orgId) {
@@ -920,9 +921,11 @@ export function registerOrgMemberRoutes(
       options.databaseAdapter?.listProfilesForOrg(orgId) ?? [],
       orgService.listMembers(orgId),
     ]);
+
     const sumRequests = (days: typeof daily) =>
       days.reduce((total, day) => total + day.requestCount, 0);
     // Everyone is listed, so quiet people and agents show up with 0 calls.
+
     const rank = (
       roster: { id: string; name: string }[],
       groups: typeof byActor.agents
@@ -935,12 +938,14 @@ export function registerOrgMemberRoutes(
         .map(({ id, name }) => ({ name, requestCount: counts.get(id) ?? 0 }))
         .sort((a, b) => b.requestCount - a.requestCount);
     };
+
     const agents = rank(
       profiles
         .filter((profile) => !profile.isSuper)
         .map((profile) => ({ id: profile.id, name: profile.name })),
       byActor.agents
     );
+
     const topAgent = agents.find((agent) => agent.requestCount > 0);
 
     return json<OrgUsageSummaryResponse>({
