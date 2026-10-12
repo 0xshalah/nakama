@@ -11,12 +11,17 @@ import {
 } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Tick02Icon } from "hugeicons-react";
+import { ArrowDown01Icon, ArrowLeft02Icon, Tick02Icon } from "hugeicons-react";
 import { type FormEvent, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
 import { OrgMemberPicker } from "@/components/settings/org-member-dialogs";
 import { OrgMemberRoleCards } from "@/components/settings/org-member-role-select";
 import { useAuth } from "@/context/use-auth";
+import {
+  useAcpAgentPresetsQuery,
+  useToolsQuery,
+} from "@/hooks/use-app-queries";
 import {
   useAddOrgMember,
   useOrganizationOverview,
@@ -31,9 +36,43 @@ type TeamStep = {
   action: string;
   description: string;
   done: boolean;
-  path?: string;
+  onOpen: () => void;
   title: string;
 };
+
+function ProgressRing({ done, total }: { done: number; total: number }) {
+  const radius = 20;
+  const circumference = 2 * Math.PI * radius;
+
+  return (
+    <div className="relative size-14 shrink-0">
+      <svg aria-hidden className="size-14 -rotate-90" viewBox="0 0 48 48">
+        <circle
+          className="stroke-muted"
+          cx="24"
+          cy="24"
+          fill="none"
+          r={radius}
+          strokeWidth="4"
+        />
+        <circle
+          className="stroke-primary"
+          cx="24"
+          cy="24"
+          fill="none"
+          r={radius}
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - done / total)}
+          strokeLinecap="round"
+          strokeWidth="4"
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center font-semibold text-sm">
+        {done}/{total}
+      </span>
+    </div>
+  );
+}
 
 function TeamAddPersonDialog({
   orgId,
@@ -149,6 +188,9 @@ export function TeamDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const running = useRef(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [addAgentOpen, setAddAgentOpen] = useState(false);
+  const { data: tools = [] } = useToolsQuery();
+  const { data: agentPresets = [] } = useAcpAgentPresetsQuery();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -158,7 +200,16 @@ export function TeamDetailPage() {
     activeOrg?.parentOrgId ?? null
   );
 
-  const team = overview.data?.teams.find((entry) => entry.id === teamId);
+  const foundTeam = overview.data?.teams.find((entry) => entry.id === teamId);
+  const lastTeam = useRef(foundTeam);
+
+  if (foundTeam) {
+    lastTeam.current = foundTeam;
+  }
+
+  const team =
+    foundTeam ??
+    (lastTeam.current?.id === teamId ? lastTeam.current : undefined);
 
   if (!team) {
     return (
@@ -183,35 +234,37 @@ export function TeamDetailPage() {
       action: "Add person",
       description: "So they can work with the team",
       done: team.memberCount > 1,
+      onOpen: () => setAddOpen(true),
       title: "Invite your teammates",
     },
     {
       action: "Add agent",
       description: "An AI helper that does tasks for the team",
       done: team.localResourceCounts.agents > 0,
-      path: PAGE_PATHS.profiles,
+      onOpen: () => setAddAgentOpen(true),
       title: "Add your first agent",
     },
     {
       action: "Add knowledge",
       description: "Knowledge your agents can read",
       done: team.localResourceCounts.knowledge > 0,
-      path: PAGE_PATHS.profiles,
+      onOpen: () => navigate(PAGE_PATHS.profiles),
       title: "Share documents and notes",
     },
     {
       action: "Add skill",
       description: "Step-by-step know-how agents can follow",
       done: team.localResourceCounts.skills > 0,
-      path: PAGE_PATHS.skills,
+      onOpen: () => navigate(PAGE_PATHS.skills),
       title: "Teach a skill",
     },
   ];
 
   const doneCount = steps.filter((step) => step.done).length + 1;
   const total = steps.length + 1;
+  const nextStep = steps.find((step) => !step.done);
 
-  async function openIn(path?: string) {
+  async function openIn(open: () => void) {
     if (running.current || !team) {
       return;
     }
@@ -225,11 +278,7 @@ export function TeamDetailPage() {
         await switchOrg(team.id);
       }
 
-      if (path) {
-        navigate(path);
-      } else {
-        setAddOpen(true);
-      }
+      open();
     } catch (cause) {
       setError(formatError(cause));
     } finally {
@@ -262,12 +311,15 @@ export function TeamDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-1">
           <Link
-            className="text-muted-foreground text-sm"
+            className="inline-flex items-center gap-1.5 text-muted-foreground text-sm"
             to={PAGE_PATHS.organization}
           >
+            <ArrowLeft02Icon aria-hidden className="size-4" />
             Back to organization
           </Link>
-          <h2 className="break-words font-semibold text-xl">{team.name}</h2>
+          <h2 className="break-words font-semibold text-3xl tracking-tight">
+            {team.name}
+          </h2>
           <p className="text-muted-foreground text-sm">
             {team.memberCount} {team.memberCount === 1 ? "person" : "people"}
           </p>
@@ -275,8 +327,7 @@ export function TeamDetailPage() {
         {canWork && !team.isCurrent && (
           <Button
             disabled={pending}
-            onClick={() => void openIn(PAGE_PATHS.chat)}
-            size="sm"
+            onClick={() => void openIn(() => navigate(PAGE_PATHS.chat))}
             type="button"
           >
             Work in this team
@@ -288,74 +339,89 @@ export function TeamDetailPage() {
           {error}
         </p>
       )}
-      <Card className="overflow-hidden shadow-none">
-        <div className="space-y-0.5 px-5 py-4">
-          <h3 className="font-semibold text-sm">Get your team ready</h3>
-          <p className="text-muted-foreground text-xs">
-            {doneCount} of {total} steps done
-          </p>
+      <Card className="gap-0 overflow-hidden py-0 shadow-none">
+        <div className="flex items-center gap-4 px-6 py-5">
+          <ProgressRing done={doneCount} total={total} />
+          <div className="space-y-0.5">
+            <h3 className="font-semibold text-lg">Get your team ready</h3>
+            <p className="text-muted-foreground text-sm">
+              {total - doneCount === 0
+                ? "All steps done"
+                : `${total - doneCount} ${total - doneCount === 1 ? "step" : "steps"} left`}
+            </p>
+          </div>
         </div>
-        <div className="h-1 bg-muted">
-          <div
-            className="h-full bg-primary"
-            style={{ width: `${(doneCount / total) * 100}%` }}
-          />
-        </div>
-        <ul className="divide-y divide-border">
-          <li className="flex items-center gap-3 px-5 py-3 text-muted-foreground text-sm">
-            <Tick02Icon aria-hidden className="size-5 text-primary" />
-            Create your team
+        <ul className="divide-y divide-border border-border border-t">
+          <li className="flex items-center gap-4 px-6 py-4 text-muted-foreground">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <Tick02Icon aria-hidden className="size-4" />
+            </span>
+            <span className="line-through">Create your team</span>
           </li>
-          {steps.map((step) => (
-            <li className="flex items-center gap-3 px-5 py-3" key={step.title}>
-              {step.done ? (
-                <Tick02Icon aria-hidden className="size-5 text-primary" />
-              ) : (
-                <span
-                  aria-hidden
-                  className="size-5 shrink-0 rounded-full border-2 border-border"
-                />
-              )}
-              <div className="min-w-0 flex-1">
-                <p
-                  className={
-                    step.done
-                      ? "text-muted-foreground text-sm"
-                      : "font-medium text-sm"
-                  }
-                >
-                  {step.title}
-                </p>
-                {!step.done && (
-                  <p className="text-muted-foreground text-xs">
-                    {step.description}
-                  </p>
+          {steps.map((step, index) => {
+            const active = step === nextStep;
+
+            return (
+              <li
+                className={`flex items-center gap-4 px-6 py-4 ${active ? "bg-primary/5" : ""}`}
+                key={step.title}
+              >
+                {step.done ? (
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <Tick02Icon aria-hidden className="size-4" />
+                  </span>
+                ) : (
+                  <span
+                    aria-hidden
+                    className={`flex size-7 shrink-0 items-center justify-center rounded-full border-2 font-semibold text-xs ${active ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
+                  >
+                    {index + 2}
+                  </span>
                 )}
-              </div>
-              {!step.done && (
-                <Button
-                  disabled={pending || !canWork}
-                  onClick={() => void openIn(step.path)}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  {step.action}
-                </Button>
-              )}
-            </li>
-          ))}
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={
+                      step.done
+                        ? "text-muted-foreground line-through"
+                        : "font-medium"
+                    }
+                  >
+                    {step.title}
+                  </p>
+                  {!step.done && (
+                    <p className="text-muted-foreground text-sm">
+                      {step.description}
+                    </p>
+                  )}
+                </div>
+                {!step.done && (
+                  <Button
+                    disabled={pending || !canWork}
+                    onClick={() => void openIn(step.onOpen)}
+                    type="button"
+                    variant={active ? "default" : "outline"}
+                  >
+                    {step.action}
+                  </Button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </Card>
-      <Card className="shadow-none">
-        <details>
-          <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4">
-            <span className="font-medium text-sm">Technical details</span>
-            <span className="text-muted-foreground text-xs">
+      <Card className="gap-0 py-0 shadow-none">
+        <details className="group">
+          <summary className="flex cursor-pointer items-center justify-between gap-3 px-6 py-4">
+            <span className="font-semibold">Technical details</span>
+            <span className="flex items-center gap-2 text-muted-foreground text-sm">
               For admins and support
+              <ArrowDown01Icon
+                aria-hidden
+                className="size-4 transition-transform group-open:rotate-180"
+              />
             </span>
           </summary>
-          <dl className="space-y-2 border-border border-t px-5 py-4 text-sm">
+          <dl className="space-y-2 border-border border-t px-6 py-4 text-sm">
             <div>
               <dt className="text-muted-foreground">Team ID</dt>
               <dd className="break-all font-mono text-xs">{team.id}</dd>
@@ -366,11 +432,9 @@ export function TeamDetailPage() {
             </div>
           </dl>
         </details>
-      </Card>
-      {canArchiveOrganization(user?.isPlatformAdmin === true) && (
-        <Card className="gap-0 py-0 shadow-none">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-            <h3 className="font-medium text-sm">Delete team</h3>
+        {canArchiveOrganization(user?.isPlatformAdmin === true) && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-border border-t px-6 py-4">
+            <h3 className="font-semibold">Delete team</h3>
             <Button
               onClick={() => {
                 setDeleteError(null);
@@ -382,50 +446,56 @@ export function TeamDetailPage() {
               Delete
             </Button>
           </div>
-          <Dialog
-            onOpenChange={(open) => {
-              if (!(open || deleting)) {
-                setDeleteOpen(false);
-              }
-            }}
-            open={deleteOpen}
-          >
-            <DialogContent className="gap-6 p-6 sm:max-w-md">
-              <DialogHeader className="gap-3">
-                <DialogTitle>Delete team?</DialogTitle>
-                <DialogDescription>
-                  {team.name} will disappear from the switcher and chat.
-                  Members, profiles, and files stay on disk. Nakama cannot
-                  restore it.
-                </DialogDescription>
-              </DialogHeader>
-              {deleteError && (
-                <p className="text-destructive text-sm" role="alert">
-                  {deleteError}
-                </p>
-              )}
-              <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
-                <Button
-                  disabled={deleting}
-                  onClick={() => setDeleteOpen(false)}
-                  type="button"
-                  variant="outline"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  disabled={deleting}
-                  onClick={() => void deleteTeam()}
-                  type="button"
-                  variant="destructive"
-                >
-                  {deleting ? <Spinner className="size-4" /> : "Delete"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </Card>
-      )}
+        )}
+      </Card>
+      <Dialog
+        onOpenChange={(open) => {
+          if (!(open || deleting)) {
+            setDeleteOpen(false);
+          }
+        }}
+        open={deleteOpen}
+      >
+        <DialogContent className="gap-6 p-6 sm:max-w-md">
+          <DialogHeader className="gap-3">
+            <DialogTitle>Delete team?</DialogTitle>
+            <DialogDescription>
+              {team.name} will disappear from the switcher and chat. Members,
+              profiles, and files stay on disk. Nakama cannot restore it.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <p className="text-destructive text-sm" role="alert">
+              {deleteError}
+            </p>
+          )}
+          <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+            <Button
+              disabled={deleting}
+              onClick={() => setDeleteOpen(false)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={deleting}
+              onClick={() => void deleteTeam()}
+              type="button"
+              variant="destructive"
+            >
+              {deleting ? <Spinner className="size-4" /> : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <ProfileCreateDialog
+        agentPresets={agentPresets}
+        onCreated={() => undefined}
+        onOpenChange={setAddAgentOpen}
+        open={addAgentOpen}
+        tools={tools}
+      />
       {activeOrg && (
         <TeamAddPersonDialog
           onOpenChange={setAddOpen}
