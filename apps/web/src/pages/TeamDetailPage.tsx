@@ -11,7 +11,7 @@ import {
 } from "@nakama/ui/dialog";
 import { Spinner } from "@nakama/ui/spinner";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDown01Icon, ArrowLeft02Icon, Tick02Icon } from "hugeicons-react";
+import { ArrowDown01Icon, Tick02Icon } from "hugeicons-react";
 import { type FormEvent, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ProfileCreateDialog } from "@/components/ProfileCreateDialog";
@@ -343,16 +343,8 @@ function TeamHeader({
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="min-w-0 space-y-1">
-        <Link
-          className="inline-flex items-center gap-1.5 text-muted-foreground text-sm"
-          to={PAGE_PATHS.organization}
-        >
-          <ArrowLeft02Icon aria-hidden className="size-4" />
-          Back to organization
-        </Link>
-        <h2 className="break-words font-semibold text-3xl tracking-tight">
-          {team.name}
-        </h2>
+        <TeamBreadcrumb name={team.name} />
+        <h2 className="break-words font-semibold text-xl">{team.name}</h2>
         <p className="text-muted-foreground text-sm">
           {team.memberCount} {team.memberCount === 1 ? "person" : "people"}
         </p>
@@ -363,6 +355,46 @@ function TeamHeader({
         </Button>
       )}
     </div>
+  );
+}
+
+function TeamBreadcrumb({ name }: { name: string }) {
+  return (
+    <nav
+      aria-label="Breadcrumb"
+      className="flex flex-wrap items-center pb-3 text-sm"
+    >
+      <ol className="flex min-w-0 flex-wrap items-center gap-2">
+        <li>
+          <Link
+            className="text-muted-foreground transition-colors hover:text-foreground"
+            to={PAGE_PATHS.organization}
+          >
+            Organization
+          </Link>
+        </li>
+        <li aria-hidden className="text-muted-foreground/60">
+          /
+        </li>
+        <li>
+          <Link
+            className="text-muted-foreground transition-colors hover:text-foreground"
+            to={PAGE_PATHS.organization}
+          >
+            Teams
+          </Link>
+        </li>
+        <li aria-hidden className="text-muted-foreground/60">
+          /
+        </li>
+        <li
+          aria-current="page"
+          className="min-w-0 truncate font-semibold text-foreground"
+        >
+          {name}
+        </li>
+      </ol>
+    </nav>
   );
 }
 
