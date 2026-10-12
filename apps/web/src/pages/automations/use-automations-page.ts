@@ -55,6 +55,7 @@ export function useAutomationsPage() {
 
   const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const appliedUrlId = useRef<string | null>(null);
 
   const {
     data: runs = [],
@@ -131,8 +132,10 @@ export function useAutomationsPage() {
 
     if (
       automationFromUrl &&
+      automationFromUrl !== appliedUrlId.current &&
       automations.some((automation) => automation.id === automationFromUrl)
     ) {
+      appliedUrlId.current = automationFromUrl;
       setSelectedId(automationFromUrl);
 
       return;
