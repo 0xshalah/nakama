@@ -571,136 +571,132 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-run-mark[data-status="running"] {
     background: #3b82f6;
   }
-  .workflow-history {
-    display: grid;
-    flex: 1;
-    grid-template-columns: 220px minmax(0, 1fr);
-    min-height: 0;
-  }
-  .workflow-history-list {
-    padding: 12px 8px;
-    overflow-y: auto;
-    border-right: 1px solid var(--border);
-  }
-  .workflow-history-list h3 {
-    margin: 8px 8px 4px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--muted-foreground);
-  }
-  .workflow-history-item {
-    gap: 10px;
-    justify-content: flex-start;
-    width: 100%;
-  }
-  .workflow-history-item[aria-current="true"] {
-    background: var(--muted);
-  }
-  .workflow-history-detail {
+  .workflow-days {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 24px;
     width: 100%;
     max-width: 760px;
-    padding: 24px 20px;
     margin-inline: auto;
-    overflow-y: auto;
   }
-  .workflow-history-detail header {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    justify-content: space-between;
-  }
-  .workflow-history-detail h3 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-  }
-  .workflow-history-detail header p {
-    margin: 2px 0 0;
-    font-size: 13px;
-  }
-  .workflow-history-error {
+  .workflow-days h3 {
     display: flex;
     gap: 10px;
-    padding: 14px;
-    color: var(--destructive);
-    background: color-mix(in srgb, var(--destructive) 6%, var(--background));
-    border: 1px solid color-mix(in srgb, var(--destructive) 25%, transparent);
-    border-radius: 12px;
+    align-items: baseline;
+    margin: 0 4px 8px;
+    font-size: 14px;
+    font-weight: 600;
   }
-  .workflow-history-error p {
+  .workflow-days h3 .workflow-empty {
+    font-size: 13px;
+    font-weight: 400;
+  }
+  .workflow-day-runs {
+    padding: 4px 0;
+    margin: 0;
+    list-style: none;
+    background: var(--background);
+    border-radius: 14px;
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--border) 60%, transparent),
+      0 1px 2px rgb(0 0 0 / 0.04);
+  }
+  .workflow-day-runs > li > button {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    width: 100%;
+    min-height: 48px;
+    padding: 0 18px;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 14px;
+  }
+  .workflow-day-runs > li > button:hover {
+    background: color-mix(in srgb, var(--muted) 50%, transparent);
+  }
+  .workflow-run-time {
+    flex-shrink: 0;
+    width: 80px;
+    font-variant-numeric: tabular-nums;
+  }
+  .workflow-pips {
+    display: flex;
+    flex-shrink: 0;
+    gap: 4px;
+  }
+  .workflow-pips > span {
+    width: 18px;
+    height: 6px;
+    background: var(--muted);
+    border-radius: 3px;
+  }
+  .workflow-pips > [data-status="completed"] {
+    background: #16a34a;
+  }
+  .workflow-pips > [data-status="failed"] {
+    background: var(--destructive);
+  }
+  .workflow-pips > [data-status="running"] {
+    background: #3b82f6;
+  }
+  .workflow-run-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+  .workflow-run-took {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted-foreground);
+  }
+  .workflow-run-detail {
+    display: grid;
+    gap: 12px;
+    padding: 0 18px 16px 114px;
+  }
+  .workflow-run-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .workflow-run-actions p {
+    flex: 1;
+    min-width: 0;
     margin: 0;
     overflow-wrap: anywhere;
   }
-  .workflow-history-error p:first-child {
-    font-weight: 600;
+  .workflow-run-actions p[role="alert"] {
+    color: var(--destructive);
   }
-  .workflow-trace-box {
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-  }
-  .workflow-trace-head,
-  .workflow-trace > li > details > summary {
-    display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) minmax(80px, 200px) 56px;
-    gap: 14px;
-    align-items: center;
-    padding: 12px 16px;
-  }
-  .workflow-trace-head {
-    padding-block: 8px;
-    font-size: 12px;
-    color: var(--muted-foreground);
-    background: color-mix(in srgb, var(--muted) 40%, transparent);
-    border-bottom: 1px solid var(--border);
-  }
-  .workflow-trace-head > :last-child {
-    text-align: right;
-  }
-  .workflow-trace {
+  .workflow-run-steps {
     padding: 0;
     margin: 0;
     list-style: none;
   }
-  .workflow-trace li + li {
-    border-top: 1px solid var(--border);
-  }
-  .workflow-trace li[data-status="failed"] {
-    background: color-mix(in srgb, var(--destructive) 4%, var(--background));
-  }
-  .workflow-trace li[data-status="skipped"] > details > summary {
-    opacity: 0.6;
-  }
-  .workflow-trace > li > details > summary {
+  .workflow-run-steps summary {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 6px 0;
     cursor: pointer;
     list-style: none;
   }
-  .workflow-trace > li > details > summary::-webkit-details-marker {
+  .workflow-run-steps summary::-webkit-details-marker {
     display: none;
   }
-  .workflow-trace-name {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    font-weight: 500;
-  }
-  .workflow-trace-name .workflow-empty {
-    font-size: 12px;
-    font-weight: 400;
-  }
-  .workflow-trace-time {
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    color: var(--muted-foreground);
-    text-align: right;
-  }
-  .workflow-trace-body {
+  .workflow-run-steps details[open] {
     display: grid;
-    gap: 12px;
-    padding: 0 16px 16px 54px;
+    gap: 10px;
+    padding-bottom: 10px;
   }
   .workflow-receipt {
     display: grid;
@@ -761,13 +757,11 @@ var style_default = `[data-plugin-id="workflows"] {
     border-radius: 10px;
   }
   @container (max-width: 760px) {
-    .workflow-history {
-      grid-template-columns: minmax(0, 1fr);
+    .workflow-run-detail {
+      padding-left: 18px;
     }
-    .workflow-history-list {
-      max-height: 180px;
-      border-right: 0;
-      border-bottom: 1px solid var(--border);
+    .workflow-run-time {
+      width: auto;
     }
     .workflow-step-last {
       display: none;
@@ -860,64 +854,6 @@ var style_default = `[data-plugin-id="workflows"] {
     border-right: 1.5px solid var(--muted-foreground);
     border-bottom: 1.5px solid var(--muted-foreground);
     transform: rotate(45deg);
-  }
-  .workflow-run-badge {
-    display: grid;
-    flex-shrink: 0;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--muted-foreground);
-    background: var(--muted);
-    border-radius: 50%;
-  }
-  .workflow-run-badge[data-status="completed"] {
-    color: #15803d;
-    background: #f0fdf4;
-  }
-  .workflow-run-badge[data-status="failed"] {
-    color: var(--destructive);
-    background: color-mix(in srgb, var(--destructive) 10%, var(--background));
-  }
-  .workflow-history-item {
-    height: auto;
-    padding-block: 8px;
-  }
-  .workflow-history-text {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    min-width: 0;
-    line-height: 1.3;
-  }
-  .workflow-history-text > :first-child {
-    font-weight: 500;
-  }
-  .workflow-history-text > :last-child {
-    font-size: 12px;
-    font-weight: 400;
-  }
-  .workflow-run-chip {
-    display: inline-flex;
-    align-items: center;
-    height: 22px;
-    padding: 0 10px;
-    margin-bottom: 6px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--muted-foreground);
-    background: var(--muted);
-    border-radius: 999px;
-  }
-  .workflow-run-chip[data-status="completed"] {
-    color: #15803d;
-    background: #f0fdf4;
-  }
-  .workflow-run-chip[data-status="failed"] {
-    color: var(--destructive);
-    background: color-mix(in srgb, var(--destructive) 10%, var(--background));
   }
 }
 
@@ -1082,79 +1018,48 @@ var style_default = `[data-plugin-id="workflows"] {
   }
   .workflow-data-tables {
     display: flex;
-    flex: 1 1 220px;
-    flex-direction: column;
-    gap: 2px;
-    max-width: 260px;
-    padding: 16px 12px;
-    overflow-y: auto;
-    background: color-mix(in srgb, var(--muted) 40%, var(--background));
-    border-right: 1px solid var(--border);
-  }
-  .workflow-data-tables > p {
-    margin: 0 8px 8px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--muted-foreground);
+    flex: 1 1 320px;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
   }
   .workflow-data-tables [data-slot="button"] {
-    gap: 10px;
-    justify-content: flex-start;
-    height: auto;
-    min-height: 40px;
-    padding: 0 10px;
-    color: var(--foreground);
-  }
-  .workflow-data-tables [aria-current="true"] {
-    background: var(--muted);
-  }
-  .workflow-data-tables svg {
-    flex-shrink: 0;
-    color: var(--muted-foreground);
-  }
-  .workflow-data-table-name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    gap: 8px;
     font-family: monospace;
     font-size: 13px;
-    text-align: left;
+    border-radius: 999px;
+  }
+  .workflow-data-tables [aria-selected="true"] {
+    color: var(--background);
+    background: var(--foreground);
+    border-color: var(--foreground);
   }
   .workflow-data-count {
-    font-size: 12px;
-    color: var(--muted-foreground);
+    padding: 0 6px;
+    font-family: var(--font-sans, sans-serif);
+    font-size: 11px;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    border-radius: 999px;
   }
   .workflow-data-main {
     display: flex;
-    flex: 999 1 480px;
+    flex: 1;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
     min-width: 0;
     min-height: 0;
-    padding: 20px 24px;
+    padding: 16px 24px;
     overflow-y: auto;
   }
-  .workflow-data-head {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 12px;
-    align-items: center;
-  }
-  .workflow-data-head h2 {
-    margin: 0;
-    font-family: monospace;
-    font-size: 16px;
-    font-weight: 600;
-  }
-  .workflow-data-head > .workflow-empty {
-    font-size: 13px;
+  .workflow-data-meta {
+    margin: -4px 0 0;
+    font-size: 12px;
+    color: var(--muted-foreground);
   }
   .workflow-data-views {
     display: flex;
-    gap: 4px;
-    padding: 3px;
-    margin-left: auto;
+    gap: 2px;
+    padding: 2px;
     background: var(--muted);
     border-radius: 10px;
   }
@@ -1170,12 +1075,12 @@ var style_default = `[data-plugin-id="workflows"] {
   .workflow-data-toolbar {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
   }
   .workflow-data-toolbar [data-slot="input"] {
-    flex: 0 1 280px;
-    margin-right: auto;
+    flex: 0 1 200px;
+    height: 32px;
   }
   .workflow-data-body {
     display: flex;
@@ -1290,16 +1195,21 @@ var style_default = `[data-plugin-id="workflows"] {
     color: var(--muted-foreground);
   }
   .workflow-data-row {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
     display: flex;
-    flex: 1 1 280px;
     flex-direction: column;
     gap: 8px;
-    max-width: 360px;
-    max-height: 640px;
+    width: min(360px, 100%);
     padding: 16px;
     overflow-y: auto;
-    border: 1px solid var(--border);
-    border-radius: 12px;
+    background: var(--background);
+    border-left: 1px solid var(--border);
+    box-shadow: -8px 0 24px
+      color-mix(in srgb, var(--foreground) 8%, transparent);
   }
   .workflow-data-row header {
     display: flex;
@@ -1370,33 +1280,6 @@ var style_default = `[data-plugin-id="workflows"] {
     background: color-mix(in srgb, var(--muted) 40%, var(--background));
     border: 1px solid var(--border);
     border-radius: 12px;
-  }
-  @container (max-width: 760px) {
-    .workflow-data-tables {
-      max-width: none;
-      border-right: 0;
-      border-bottom: 1px solid var(--border);
-    }
-    .workflow-data-row {
-      max-width: none;
-    }
-  }
-  @container (max-width: 1100px) {
-    .workflow-data-row {
-      position: absolute;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 2;
-      width: min(360px, 100%);
-      max-width: none;
-      max-height: none;
-      background: var(--background);
-      border-width: 0 0 0 1px;
-      border-radius: 0;
-      box-shadow: -8px 0 24px
-        color-mix(in srgb, var(--foreground) 8%, transparent);
-    }
   }
   .workflow-data-main > .workflow-data-grid {
     flex: none;
@@ -1907,9 +1790,13 @@ function apply(ctx) {
       close: "m6 6 12 12M6 18 18 6",
       collapse: "M20 10h-6V4M14 10l7-7M4 14h6v6M10 14l-7 7",
       delete: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7",
+      download: "M12 4v11M7 10l5 5 5-5M5 20h14",
       expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
+      json: "M8 4c-2 0-2 2-2 4s-2 4-2 4 2 2 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 2-2 4 0 4-2 4",
       more: "M5 12h.01M12 12h.01M19 12h.01",
       play: "m8 5 11 7-11 7V5Z",
+      rows: "M3 4h18v16H3V4ZM3 9h18M3 14h18",
+      schema: "M4 6h16M4 12h10M4 18h6",
       table: "M3 4h18v16H3V4ZM3 9h18M9 9v11",
       warning: "M12 3 2 21h20L12 3ZM12 9v5M12 17h.01",
       workflow: "M4 3h6v6H4V3ZM14 15h6v6h-6v-6ZM7 9v9h7M10 6h7v9"
@@ -2838,9 +2725,8 @@ function apply(ctx) {
     canRun,
     onRunAgain
   }) {
-    const [selectedId, setSelectedId] = React.useState("");
-    const run = runs.find((entry) => entry.id === selectedId) ?? runs[0];
-    if (!run) {
+    const [openId, setOpenId] = React.useState();
+    if (!runs[0]) {
       return /* @__PURE__ */ React.createElement("section", {
         "aria-label": "History",
         className: "workflow-scroll"
@@ -2848,94 +2734,110 @@ function apply(ctx) {
         className: "workflow-empty"
       }, "No runs yet."));
     }
+    const open = openId === undefined ? runs[0].status === "completed" ? null : runs[0].id : openId;
+    const name = (stepId) => stepNames[stepId] ?? titleCase(stepId);
+    const days = new Map;
+    for (const run of runs) {
+      const day = new Date(run.startedAt).toDateString();
+      days.set(day, [...days.get(day) ?? [], run]);
+    }
+    return /* @__PURE__ */ React.createElement("section", {
+      "aria-label": "History",
+      className: "workflow-scroll"
+    }, /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-days"
+    }, [...days.values()].map((entries) => {
+      const worked = entries.filter((entry) => entry.status === "completed").length;
+      const group = dayGroup(entries[0].startedAt);
+      return /* @__PURE__ */ React.createElement("section", {
+        key: entries[0].id
+      }, /* @__PURE__ */ React.createElement("h3", null, group === "Earlier" ? new Date(entries[0].startedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : group, /* @__PURE__ */ React.createElement("span", {
+        className: "workflow-empty"
+      }, entries.length === 1 ? "1 run" : `${entries.length} runs`, worked > 0 && ` · ${worked} worked`)), /* @__PURE__ */ React.createElement("ol", {
+        className: "workflow-day-runs"
+      }, entries.map((run) => /* @__PURE__ */ React.createElement(RunRow, {
+        canRun,
+        expanded: run.id === open,
+        key: run.id,
+        name,
+        onRunAgain,
+        onToggle: () => setOpenId(run.id === open ? null : run.id),
+        run,
+        stepIds: Object.keys(stepNames)
+      }))));
+    })));
+  }
+  function RunRow({
+    run,
+    stepIds,
+    name,
+    expanded,
+    canRun,
+    onToggle,
+    onRunAgain
+  }) {
     const receipts = run.steps ?? [];
     const timeline = runTimeline(run);
-    const failedIndex = receipts.findIndex((step) => step.status === "failed");
-    const name = (stepId) => stepNames[stepId] ?? titleCase(stepId);
-    return /* @__PURE__ */ React.createElement("div", {
-      className: "workflow-history"
-    }, /* @__PURE__ */ React.createElement("nav", {
-      "aria-label": "Past runs",
-      className: "workflow-history-list"
-    }, ["Today", "Yesterday", "Earlier"].map((group) => {
-      const entries = runs.filter((entry) => dayGroup(entry.startedAt) === group);
-      return entries.length ? /* @__PURE__ */ React.createElement("section", {
-        key: group
-      }, /* @__PURE__ */ React.createElement("h3", null, group), entries.map((entry) => /* @__PURE__ */ React.createElement(Button, {
-        "aria-current": entry.id === run.id ? "true" : undefined,
-        className: "workflow-history-item",
-        key: entry.id,
-        onClick: () => setSelectedId(entry.id),
-        type: "button",
-        variant: "ghost"
-      }, /* @__PURE__ */ React.createElement("span", {
-        "aria-hidden": "true",
-        className: "workflow-run-badge",
-        "data-status": entry.status
-      }, entry.status === "completed" ? "✓" : entry.status === "failed" ? "!" : "…"), /* @__PURE__ */ React.createElement("span", {
-        className: "workflow-history-text"
-      }, /* @__PURE__ */ React.createElement("span", null, group === "Earlier" ? formatRunTime(entry.startedAt) : new Date(entry.startedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })), /* @__PURE__ */ React.createElement("span", {
-        className: "workflow-empty"
-      }, stepStatusLabels.get(entry.status) ?? entry.status))))) : null;
-    })), /* @__PURE__ */ React.createElement("section", {
-      "aria-label": "Run details",
-      className: "workflow-history-detail"
-    }, /* @__PURE__ */ React.createElement("header", null, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("span", {
-      className: "workflow-run-chip",
+    const failed = receipts.find((step) => step.status === "failed");
+    const ids = [
+      ...new Set([...stepIds, ...receipts.map((step) => step.stepId)])
+    ];
+    const reached = ids.filter((id) => timeline.has(id)).length;
+    return /* @__PURE__ */ React.createElement("li", {
       "data-status": run.status
-    }, run.status === "failed" ? "Needs a look" : stepStatusLabels.get(run.status) ?? run.status), /* @__PURE__ */ React.createElement("h3", null, run.status === "failed" ? `Stopped at step ${failedIndex + 1}` : run.status === "running" ? "Running…" : `All ${receipts.length} steps worked`), /* @__PURE__ */ React.createElement("p", {
+    }, /* @__PURE__ */ React.createElement("button", {
+      "aria-expanded": expanded,
+      onClick: onToggle,
+      type: "button"
+    }, /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-run-time"
+    }, new Date(run.startedAt).toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit"
+    })), /* @__PURE__ */ React.createElement("span", {
+      "aria-label": `${reached} of ${ids.length} steps ran`,
+      className: "workflow-pips",
+      role: "img"
+    }, ids.map((id) => /* @__PURE__ */ React.createElement("span", {
+      "data-status": timeline.get(id)?.status ?? "pending",
+      key: id
+    }))), /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-run-text"
+    }, run.status === "failed" ? failed ? `Stopped at ${name(failed.stepId)}` : "Stopped" : run.status === "running" ? "Running…" : stepStatusLabels.get(run.status) ?? run.status), /* @__PURE__ */ React.createElement("span", {
+      className: "workflow-run-took"
+    }, run.completedAt && formatDuration(Date.parse(run.completedAt) - Date.parse(run.startedAt)))), expanded && /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-run-detail"
+    }, /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-run-actions"
+    }, run.error ? /* @__PURE__ */ React.createElement("p", {
+      role: "alert"
+    }, readableError(run.error)) : /* @__PURE__ */ React.createElement("p", {
       className: "workflow-empty"
-    }, formatRunTime(run.startedAt), run.completedAt && ` · took ${formatDuration(Date.parse(run.completedAt) - Date.parse(run.startedAt))}`)), /* @__PURE__ */ React.createElement(Button, {
+    }, formatRunTime(run.startedAt)), /* @__PURE__ */ React.createElement(Button, {
       disabled: !canRun,
       onClick: () => onRunAgain(run.input),
       size: "sm",
       type: "button",
-      variant: "outline"
+      variant: "secondary"
     }, /* @__PURE__ */ React.createElement(Icon, {
       kind: "play"
-    }), "Run again")), run.error && /* @__PURE__ */ React.createElement("div", {
-      className: "workflow-history-error",
-      role: "alert"
-    }, /* @__PURE__ */ React.createElement(Icon, {
-      kind: "warning"
-    }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", null, failedIndex >= 0 ? `${name(receipts[failedIndex].stepId)} did not finish` : "This run did not finish"), /* @__PURE__ */ React.createElement("p", null, readableError(run.error)))), /* @__PURE__ */ React.createElement("div", {
-      className: "workflow-trace-box"
-    }, /* @__PURE__ */ React.createElement("div", {
-      "aria-hidden": "true",
-      className: "workflow-trace-head"
-    }, /* @__PURE__ */ React.createElement("span", null), /* @__PURE__ */ React.createElement("span", null, "Step"), /* @__PURE__ */ React.createElement("span", null, "When it ran"), /* @__PURE__ */ React.createElement("span", null, "Time")), /* @__PURE__ */ React.createElement("ol", {
-      className: "workflow-trace"
+    }), "Run again")), /* @__PURE__ */ React.createElement("ol", {
+      className: "workflow-run-steps"
     }, receipts.map((receipt) => {
-      const timing = timeline.get(receipt.stepId);
+      const duration = timeline.get(receipt.stepId)?.duration;
       return /* @__PURE__ */ React.createElement("li", {
         "data-status": receipt.status,
         key: receipt.id
-      }, /* @__PURE__ */ React.createElement("details", {
-        open: receipt.status === "failed"
-      }, /* @__PURE__ */ React.createElement("summary", null, /* @__PURE__ */ React.createElement("span", {
+      }, /* @__PURE__ */ React.createElement("details", null, /* @__PURE__ */ React.createElement("summary", null, /* @__PURE__ */ React.createElement("span", {
         className: "workflow-run-mark",
         "data-status": receipt.status
-      }), /* @__PURE__ */ React.createElement("span", {
-        className: "workflow-trace-name"
-      }, name(receipt.stepId), /* @__PURE__ */ React.createElement("span", {
+      }), /* @__PURE__ */ React.createElement("span", null, name(receipt.stepId)), /* @__PURE__ */ React.createElement("span", {
         className: "workflow-empty"
-      }, stepStatusLabels.get(receipt.status) ?? receipt.status)), /* @__PURE__ */ React.createElement("span", {
-        "aria-hidden": "true",
-        className: "workflow-bar"
-      }, /* @__PURE__ */ React.createElement("span", {
-        style: {
-          left: `${timing?.left ?? 0}%`,
-          width: `${timing?.width ?? 0}%`
-        }
-      })), /* @__PURE__ */ React.createElement("span", {
-        className: "workflow-trace-time"
-      }, timing?.duration == null ? "—" : formatDuration(timing.duration))), /* @__PURE__ */ React.createElement("div", {
-        className: "workflow-trace-body"
-      }, /* @__PURE__ */ React.createElement(StepReceipt, {
+      }, stepStatusLabels.get(receipt.status) ?? receipt.status, duration != null && ` · ${formatDuration(duration)}`)), /* @__PURE__ */ React.createElement(StepReceipt, {
         receipt,
         showError: false
-      }))));
-    }))), run.status === "completed" && run.output && /* @__PURE__ */ React.createElement("section", {
+      })));
+    })), run.status === "completed" && run.output && /* @__PURE__ */ React.createElement("section", {
       className: "workflow-history-result"
     }, /* @__PURE__ */ React.createElement("h4", null, "Result"), /* @__PURE__ */ React.createElement("p", null, run.output))));
   }
@@ -3017,28 +2919,32 @@ function apply(ctx) {
     return /* @__PURE__ */ React.createElement("div", {
       "aria-busy": loading,
       className: "workflow-data"
-    }, /* @__PURE__ */ React.createElement("nav", {
+    }, /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-data-main"
+    }, /* @__PURE__ */ React.createElement("div", {
+      className: "workflow-data-toolbar"
+    }, /* @__PURE__ */ React.createElement("div", {
       "aria-label": "Tables",
-      className: "workflow-data-tables"
-    }, /* @__PURE__ */ React.createElement("p", null, "Tables"), data.tables.map((entry) => /* @__PURE__ */ React.createElement(Button, {
-      "aria-current": entry.name === table ? "true" : undefined,
+      className: "workflow-data-tables",
+      role: "tablist"
+    }, data.tables.map((entry) => /* @__PURE__ */ React.createElement(Button, {
+      "aria-selected": entry.name === table,
       key: entry.name,
       onClick: () => pickTable(entry.name),
+      role: "tab",
+      size: "sm",
       type: "button",
-      variant: "ghost"
-    }, /* @__PURE__ */ React.createElement(Icon, {
-      kind: "table"
-    }), /* @__PURE__ */ React.createElement("span", {
-      className: "workflow-data-table-name"
-    }, entry.name), /* @__PURE__ */ React.createElement("span", {
+      variant: "outline"
+    }, entry.name, /* @__PURE__ */ React.createElement("span", {
       className: "workflow-data-count"
-    }, entry.rowCount ?? "")))), /* @__PURE__ */ React.createElement("div", {
-      className: "workflow-data-main"
-    }, /* @__PURE__ */ React.createElement("header", {
-      className: "workflow-data-head"
-    }, /* @__PURE__ */ React.createElement("h2", null, table), /* @__PURE__ */ React.createElement("span", {
-      className: "workflow-empty"
-    }, total, " ", total === 1 ? "row" : "rows", " · ", columns.length, " columns", rows.length < total ? ` · showing first ${rows.length}` : ""), /* @__PURE__ */ React.createElement("div", {
+    }, entry.rowCount ?? "")))), /* @__PURE__ */ React.createElement(Input, {
+      "aria-label": "Search rows",
+      disabled: view !== "rows" || !rows.length,
+      onChange: (event) => setQuery(event.target.value),
+      placeholder: "Search",
+      type: "search",
+      value: query
+    }), /* @__PURE__ */ React.createElement("div", {
       "aria-label": "Table view",
       className: "workflow-data-views",
       role: "tablist"
@@ -3047,28 +2953,30 @@ function apply(ctx) {
       ["schema", "Schema"],
       ["json", "JSON"]
     ].map(([id, label]) => /* @__PURE__ */ React.createElement(Button, {
+      "aria-label": label,
       "aria-selected": view === id,
       key: id,
       onClick: () => setView(id),
       role: "tab",
-      size: "sm",
+      size: "icon-sm",
+      title: label,
       type: "button",
       variant: "ghost"
-    }, label)))), view === "rows" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", {
-      className: "workflow-data-toolbar"
-    }, /* @__PURE__ */ React.createElement(Input, {
-      "aria-label": "Search rows",
-      disabled: !rows.length,
-      onChange: (event) => setQuery(event.target.value),
-      placeholder: "Search rows",
-      type: "search",
-      value: query
-    }), /* @__PURE__ */ React.createElement(Button, {
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: id
+    })))), /* @__PURE__ */ React.createElement(Button, {
+      "aria-label": "Export CSV",
       disabled: !rows.length,
       onClick: () => downloadCsv(table, columns, rows),
+      size: "icon-sm",
+      title: "Export CSV",
       type: "button",
       variant: "outline"
-    }, "Export CSV")), /* @__PURE__ */ React.createElement("div", {
+    }, /* @__PURE__ */ React.createElement(Icon, {
+      kind: "download"
+    }))), /* @__PURE__ */ React.createElement("p", {
+      className: "workflow-data-meta"
+    }, total, " ", total === 1 ? "row" : "rows", " · ", columns.length, " columns", rows.length < total ? ` · showing first ${rows.length}` : "", writer ? ` · written by ${writer.name}` : ""), view === "rows" && /* @__PURE__ */ React.createElement("div", {
       className: "workflow-data-body"
     }, /* @__PURE__ */ React.createElement("div", {
       className: "workflow-data-grid"
@@ -3090,7 +2998,7 @@ function apply(ctx) {
         setPicked(index);
       },
       type: "button"
-    }, cellText(row[column])) : cellText(row[column])))))))), !rows.length && /* @__PURE__ */ React.createElement("div", {
+    }, cellText(row[column])) : cellText(row[column])))))))), !(rows.length || loading) && /* @__PURE__ */ React.createElement("div", {
       className: "workflow-data-empty"
     }, /* @__PURE__ */ React.createElement(Icon, {
       kind: "table"
@@ -3129,7 +3037,7 @@ function apply(ctx) {
       target: "_blank"
     }, String(selected[column])) : cellText(selected[column], "null"))))), writer && /* @__PURE__ */ React.createElement("p", {
       className: "workflow-data-writer"
-    }, "Written by ", writer.name)))), view === "schema" && /* @__PURE__ */ React.createElement("div", {
+    }, "Written by ", writer.name))), view === "schema" && /* @__PURE__ */ React.createElement("div", {
       className: "workflow-data-grid"
     }, /* @__PURE__ */ React.createElement("div", {
       className: "workflow-data-scroll"

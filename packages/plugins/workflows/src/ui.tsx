@@ -887,6 +887,10 @@ export function apply(ctx: Context) {
       | "expand"
       | "close"
       | "collapse"
+      | "download"
+      | "json"
+      | "rows"
+      | "schema"
       | "table"
       | "warning"
       | "workflow";
@@ -896,9 +900,13 @@ export function apply(ctx: Context) {
       close: "m6 6 12 12M6 18 18 6",
       collapse: "M20 10h-6V4M14 10l7-7M4 14h6v6M10 14l-7 7",
       delete: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7",
+      download: "M12 4v11M7 10l5 5 5-5M5 20h14",
       expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
+      json: "M8 4c-2 0-2 2-2 4s-2 4-2 4 2 2 2 4 0 4 2 4M16 4c2 0 2 2 2 4s2 4 2 4-2 2-2 4 0 4-2 4",
       more: "M5 12h.01M12 12h.01M19 12h.01",
       play: "m8 5 11 7-11 7V5Z",
+      rows: "M3 4h18v16H3V4ZM3 9h18M3 14h18",
+      schema: "M4 6h16M4 12h10M4 18h6",
       table: "M3 4h18v16H3V4ZM3 9h18M9 9v11",
       warning: "M12 3 2 21h20L12 3ZM12 9v5M12 17h.01",
       workflow: "M4 3h6v6H4V3ZM14 15h6v6h-6v-6ZM7 9v9h7M10 6h7v9",
@@ -2423,10 +2431,9 @@ export function apply(ctx: Context) {
     canRun: boolean;
     onRunAgain(input: WorkflowRecord | null): void;
   }) {
-    const [selectedId, setSelectedId] = React.useState("");
-    const run = runs.find((entry) => entry.id === selectedId) ?? runs[0];
+    const [openId, setOpenId] = React.useState<string | null>();
 
-    if (!run) {
+    if (!runs[0]) {
       return (
         <section aria-label="History" className="workflow-scroll">
           <p className="workflow-empty">No runs yet.</p>
@@ -2434,163 +2441,186 @@ export function apply(ctx: Context) {
       );
     }
 
-    const receipts = run.steps ?? [];
-    const timeline = runTimeline(run);
-    const failedIndex = receipts.findIndex((step) => step.status === "failed");
+    const open =
+      openId === undefined
+        ? runs[0].status === "completed"
+          ? null
+          : runs[0].id
+        : openId;
+
     const name = (stepId: string) => stepNames[stepId] ?? titleCase(stepId);
+    const days = new Map<string, WorkflowRunRecord[]>();
+
+    for (const run of runs) {
+      const day = new Date(run.startedAt).toDateString();
+      days.set(day, [...(days.get(day) ?? []), run]);
+    }
 
     return (
-      <div className="workflow-history">
-        <nav aria-label="Past runs" className="workflow-history-list">
-          {["Today", "Yesterday", "Earlier"].map((group) => {
-            const entries = runs.filter(
-              (entry) => dayGroup(entry.startedAt) === group
-            );
+      <section aria-label="History" className="workflow-scroll">
+        <div className="workflow-days">
+          {[...days.values()].map((entries) => {
+            const worked = entries.filter(
+              (entry) => entry.status === "completed"
+            ).length;
 
-            return entries.length ? (
-              <section key={group}>
-                <h3>{group}</h3>
-                {entries.map((entry) => (
-                  <Button
-                    aria-current={entry.id === run.id ? "true" : undefined}
-                    className="workflow-history-item"
-                    key={entry.id}
-                    onClick={() => setSelectedId(entry.id)}
-                    type="button"
-                    variant="ghost"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="workflow-run-badge"
-                      data-status={entry.status}
-                    >
-                      {entry.status === "completed"
-                        ? "✓"
-                        : entry.status === "failed"
-                          ? "!"
-                          : "…"}
-                    </span>
-                    <span className="workflow-history-text">
-                      <span>
-                        {group === "Earlier"
-                          ? formatRunTime(entry.startedAt)
-                          : new Date(entry.startedAt).toLocaleTimeString(
-                              undefined,
-                              { hour: "numeric", minute: "2-digit" }
-                            )}
-                      </span>
-                      <span className="workflow-empty">
-                        {stepStatusLabels.get(entry.status) ?? entry.status}
-                      </span>
-                    </span>
-                  </Button>
-                ))}
+            const group = dayGroup(entries[0]!.startedAt);
+
+            return (
+              <section key={entries[0]!.id}>
+                <h3>
+                  {group === "Earlier"
+                    ? new Date(entries[0]!.startedAt).toLocaleDateString(
+                        undefined,
+                        { day: "numeric", month: "short" }
+                      )
+                    : group}
+                  <span className="workflow-empty">
+                    {entries.length === 1 ? "1 run" : `${entries.length} runs`}
+                    {worked > 0 && ` · ${worked} worked`}
+                  </span>
+                </h3>
+                <ol className="workflow-day-runs">
+                  {entries.map((run) => (
+                    <RunRow
+                      canRun={canRun}
+                      expanded={run.id === open}
+                      key={run.id}
+                      name={name}
+                      onRunAgain={onRunAgain}
+                      onToggle={() =>
+                        setOpenId(run.id === open ? null : run.id)
+                      }
+                      run={run}
+                      stepIds={Object.keys(stepNames)}
+                    />
+                  ))}
+                </ol>
               </section>
-            ) : null;
+            );
           })}
-        </nav>
-        <section aria-label="Run details" className="workflow-history-detail">
-          <header>
-            <div>
-              <span className="workflow-run-chip" data-status={run.status}>
-                {run.status === "failed"
-                  ? "Needs a look"
-                  : (stepStatusLabels.get(run.status) ?? run.status)}
-              </span>
-              <h3>
-                {run.status === "failed"
-                  ? `Stopped at step ${failedIndex + 1}`
-                  : run.status === "running"
-                    ? "Running…"
-                    : `All ${receipts.length} steps worked`}
-              </h3>
-              <p className="workflow-empty">
-                {formatRunTime(run.startedAt)}
-                {run.completedAt &&
-                  ` · took ${formatDuration(Date.parse(run.completedAt) - Date.parse(run.startedAt))}`}
-              </p>
+        </div>
+      </section>
+    );
+  }
+
+  function RunRow({
+    run,
+    stepIds,
+    name,
+    expanded,
+    canRun,
+    onToggle,
+    onRunAgain,
+  }: {
+    run: WorkflowRunRecord;
+    stepIds: string[];
+    name(stepId: string): string;
+    expanded: boolean;
+    canRun: boolean;
+    onToggle(): void;
+    onRunAgain(input: WorkflowRecord | null): void;
+  }) {
+    const receipts = run.steps ?? [];
+    const timeline = runTimeline(run);
+    const failed = receipts.find((step) => step.status === "failed");
+
+    const ids = [
+      ...new Set([...stepIds, ...receipts.map((step) => step.stepId)]),
+    ];
+
+    const reached = ids.filter((id) => timeline.has(id)).length;
+
+    return (
+      <li data-status={run.status}>
+        <button aria-expanded={expanded} onClick={onToggle} type="button">
+          <span className="workflow-run-time">
+            {new Date(run.startedAt).toLocaleTimeString(undefined, {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </span>
+          <span
+            aria-label={`${reached} of ${ids.length} steps ran`}
+            className="workflow-pips"
+            role="img"
+          >
+            {ids.map((id) => (
+              <span
+                data-status={timeline.get(id)?.status ?? "pending"}
+                key={id}
+              />
+            ))}
+          </span>
+          <span className="workflow-run-text">
+            {run.status === "failed"
+              ? failed
+                ? `Stopped at ${name(failed.stepId)}`
+                : "Stopped"
+              : run.status === "running"
+                ? "Running…"
+                : (stepStatusLabels.get(run.status) ?? run.status)}
+          </span>
+          <span className="workflow-run-took">
+            {run.completedAt &&
+              formatDuration(
+                Date.parse(run.completedAt) - Date.parse(run.startedAt)
+              )}
+          </span>
+        </button>
+        {expanded && (
+          <div className="workflow-run-detail">
+            <div className="workflow-run-actions">
+              {run.error ? (
+                <p role="alert">{readableError(run.error)}</p>
+              ) : (
+                <p className="workflow-empty">{formatRunTime(run.startedAt)}</p>
+              )}
+              <Button
+                disabled={!canRun}
+                onClick={() => onRunAgain(run.input)}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                <Icon kind="play" />
+                Run again
+              </Button>
             </div>
-            <Button
-              disabled={!canRun}
-              onClick={() => onRunAgain(run.input)}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <Icon kind="play" />
-              Run again
-            </Button>
-          </header>
-          {run.error && (
-            <div className="workflow-history-error" role="alert">
-              <Icon kind="warning" />
-              <div>
-                <p>
-                  {failedIndex >= 0
-                    ? `${name(receipts[failedIndex]!.stepId)} did not finish`
-                    : "This run did not finish"}
-                </p>
-                <p>{readableError(run.error)}</p>
-              </div>
-            </div>
-          )}
-          <div className="workflow-trace-box">
-            <div aria-hidden="true" className="workflow-trace-head">
-              <span />
-              <span>Step</span>
-              <span>When it ran</span>
-              <span>Time</span>
-            </div>
-            <ol className="workflow-trace">
+            <ol className="workflow-run-steps">
               {receipts.map((receipt) => {
-                const timing = timeline.get(receipt.stepId);
+                const duration = timeline.get(receipt.stepId)?.duration;
 
                 return (
                   <li data-status={receipt.status} key={receipt.id}>
-                    <details open={receipt.status === "failed"}>
+                    <details>
                       <summary>
                         <span
                           className="workflow-run-mark"
                           data-status={receipt.status}
                         />
-                        <span className="workflow-trace-name">
-                          {name(receipt.stepId)}
-                          <span className="workflow-empty">
-                            {stepStatusLabels.get(receipt.status) ??
-                              receipt.status}
-                          </span>
-                        </span>
-                        <span aria-hidden="true" className="workflow-bar">
-                          <span
-                            style={{
-                              left: `${timing?.left ?? 0}%`,
-                              width: `${timing?.width ?? 0}%`,
-                            }}
-                          />
-                        </span>
-                        <span className="workflow-trace-time">
-                          {timing?.duration == null
-                            ? "—"
-                            : formatDuration(timing.duration)}
+                        <span>{name(receipt.stepId)}</span>
+                        <span className="workflow-empty">
+                          {stepStatusLabels.get(receipt.status) ??
+                            receipt.status}
+                          {duration != null && ` · ${formatDuration(duration)}`}
                         </span>
                       </summary>
-                      <div className="workflow-trace-body">
-                        <StepReceipt receipt={receipt} showError={false} />
-                      </div>
+                      <StepReceipt receipt={receipt} showError={false} />
                     </details>
                   </li>
                 );
               })}
             </ol>
+            {run.status === "completed" && run.output && (
+              <section className="workflow-history-result">
+                <h4>Result</h4>
+                <p>{run.output}</p>
+              </section>
+            )}
           </div>
-          {run.status === "completed" && run.output && (
-            <section className="workflow-history-result">
-              <h4>Result</h4>
-              <p>{run.output}</p>
-            </section>
-          )}
-        </section>
-      </div>
+        )}
+      </li>
     );
   }
 
@@ -2708,31 +2738,38 @@ export function apply(ctx: Context) {
 
     return (
       <div aria-busy={loading} className="workflow-data">
-        <nav aria-label="Tables" className="workflow-data-tables">
-          <p>Tables</p>
-          {data.tables.map((entry) => (
-            <Button
-              aria-current={entry.name === table ? "true" : undefined}
-              key={entry.name}
-              onClick={() => pickTable(entry.name)}
-              type="button"
-              variant="ghost"
-            >
-              <Icon kind="table" />
-              <span className="workflow-data-table-name">{entry.name}</span>
-              <span className="workflow-data-count">
-                {entry.rowCount ?? ""}
-              </span>
-            </Button>
-          ))}
-        </nav>
         <div className="workflow-data-main">
-          <header className="workflow-data-head">
-            <h2>{table}</h2>
-            <span className="workflow-empty">
-              {total} {total === 1 ? "row" : "rows"} · {columns.length} columns
-              {rows.length < total ? ` · showing first ${rows.length}` : ""}
-            </span>
+          <div className="workflow-data-toolbar">
+            <div
+              aria-label="Tables"
+              className="workflow-data-tables"
+              role="tablist"
+            >
+              {data.tables.map((entry) => (
+                <Button
+                  aria-selected={entry.name === table}
+                  key={entry.name}
+                  onClick={() => pickTable(entry.name)}
+                  role="tab"
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {entry.name}
+                  <span className="workflow-data-count">
+                    {entry.rowCount ?? ""}
+                  </span>
+                </Button>
+              ))}
+            </div>
+            <Input
+              aria-label="Search rows"
+              disabled={view !== "rows" || !rows.length}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search"
+              type="search"
+              value={query}
+            />
             <div
               aria-label="Table view"
               className="workflow-data-views"
@@ -2746,171 +2783,169 @@ export function apply(ctx: Context) {
                 ] as const
               ).map(([id, label]) => (
                 <Button
+                  aria-label={label}
                   aria-selected={view === id}
                   key={id}
                   onClick={() => setView(id)}
                   role="tab"
-                  size="sm"
+                  size="icon-sm"
+                  title={label}
                   type="button"
                   variant="ghost"
                 >
-                  {label}
+                  <Icon kind={id} />
                 </Button>
               ))}
             </div>
-          </header>
+            <Button
+              aria-label="Export CSV"
+              disabled={!rows.length}
+              onClick={() => downloadCsv(table, columns, rows)}
+              size="icon-sm"
+              title="Export CSV"
+              type="button"
+              variant="outline"
+            >
+              <Icon kind="download" />
+            </Button>
+          </div>
+          <p className="workflow-data-meta">
+            {total} {total === 1 ? "row" : "rows"} · {columns.length} columns
+            {rows.length < total ? ` · showing first ${rows.length}` : ""}
+            {writer ? ` · written by ${writer.name}` : ""}
+          </p>
 
           {view === "rows" && (
-            <>
-              <div className="workflow-data-toolbar">
-                <Input
-                  aria-label="Search rows"
-                  disabled={!rows.length}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search rows"
-                  type="search"
-                  value={query}
-                />
-                <Button
-                  disabled={!rows.length}
-                  onClick={() => downloadCsv(table, columns, rows)}
-                  type="button"
-                  variant="outline"
-                >
-                  Export CSV
-                </Button>
-              </div>
-              <div className="workflow-data-body">
-                <div className="workflow-data-grid">
-                  <div className="workflow-data-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          {columns.map((column) => (
-                            <th key={column} scope="col">
-                              {column}
-                              <span>{types[column]}</span>
-                            </th>
+            <div className="workflow-data-body">
+              <div className="workflow-data-grid">
+                <div className="workflow-data-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        {columns.map((column) => (
+                          <th key={column} scope="col">
+                            {column}
+                            <span>{types[column]}</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shown.map(({ index, row }) => (
+                        <tr
+                          aria-selected={picked === index}
+                          key={index}
+                          onClick={() => setPicked(index)}
+                        >
+                          {columns.map((column, at) => (
+                            <td data-type={types[column]} key={column}>
+                              {at === 0 ? (
+                                <button
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setPicked(index);
+                                  }}
+                                  type="button"
+                                >
+                                  {cellText(row[column])}
+                                </button>
+                              ) : (
+                                cellText(row[column])
+                              )}
+                            </td>
                           ))}
                         </tr>
-                      </thead>
-                      <tbody>
-                        {shown.map(({ index, row }) => (
-                          <tr
-                            aria-selected={picked === index}
-                            key={index}
-                            onClick={() => setPicked(index)}
-                          >
-                            {columns.map((column, at) => (
-                              <td data-type={types[column]} key={column}>
-                                {at === 0 ? (
-                                  <button
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setPicked(index);
-                                    }}
-                                    type="button"
-                                  >
-                                    {cellText(row[column])}
-                                  </button>
-                                ) : (
-                                  cellText(row[column])
-                                )}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {!rows.length && (
-                    <div className="workflow-data-empty">
-                      <Icon kind="table" />
-                      <h3>No rows yet</h3>
-                      <p>
-                        {writer
-                          ? `${writer.name} writes to this table. Run the workflow to fill it.`
-                          : "Run the workflow to fill this table."}
-                      </p>
-                      <Button disabled={!canRun} onClick={onRun} type="button">
-                        <Icon kind="play" />
-                        Try it now
-                      </Button>
-                    </div>
-                  )}
-                  {Boolean(rows.length) && !shown.length && (
-                    <p className="workflow-data-empty workflow-empty">
-                      No rows match your search.
-                    </p>
-                  )}
-                </div>
-                {selected && (
-                  <aside aria-label="Row details" className="workflow-data-row">
-                    <header>
-                      <h3>Row</h3>
-                      {keyColumn && (
-                        <span>
-                          {keyColumn} = {cellText(selected[keyColumn])}
-                        </span>
-                      )}
-                      <Button
-                        onClick={() =>
-                          void navigator.clipboard.writeText(
-                            JSON.stringify(selected, null, 2)
-                          )
-                        }
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        Copy JSON
-                      </Button>
-                      <Button
-                        aria-label="Close row details"
-                        onClick={() => setPicked(null)}
-                        size="icon-sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        <Icon kind="close" />
-                      </Button>
-                    </header>
-                    <dl>
-                      {columns.map((column) => (
-                        <div key={column}>
-                          <dt>
-                            <span>{column}</span>
-                            <span>{types[column]}</span>
-                          </dt>
-                          <dd
-                            data-empty={selected[column] == null || undefined}
-                            data-type={types[column]}
-                          >
-                            {types[column] === "url" &&
-                            isUrl(selected[column]) ? (
-                              <a
-                                href={String(selected[column])}
-                                rel="noreferrer"
-                                target="_blank"
-                              >
-                                {String(selected[column])}
-                              </a>
-                            ) : (
-                              cellText(selected[column], "null")
-                            )}
-                          </dd>
-                        </div>
                       ))}
-                    </dl>
-                    {writer && (
-                      <p className="workflow-data-writer">
-                        Written by {writer.name}
-                      </p>
-                    )}
-                  </aside>
+                    </tbody>
+                  </table>
+                </div>
+                {!(rows.length || loading) && (
+                  <div className="workflow-data-empty">
+                    <Icon kind="table" />
+                    <h3>No rows yet</h3>
+                    <p>
+                      {writer
+                        ? `${writer.name} writes to this table. Run the workflow to fill it.`
+                        : "Run the workflow to fill this table."}
+                    </p>
+                    <Button disabled={!canRun} onClick={onRun} type="button">
+                      <Icon kind="play" />
+                      Try it now
+                    </Button>
+                  </div>
+                )}
+                {Boolean(rows.length) && !shown.length && (
+                  <p className="workflow-data-empty workflow-empty">
+                    No rows match your search.
+                  </p>
                 )}
               </div>
-            </>
+              {selected && (
+                <aside aria-label="Row details" className="workflow-data-row">
+                  <header>
+                    <h3>Row</h3>
+                    {keyColumn && (
+                      <span>
+                        {keyColumn} = {cellText(selected[keyColumn])}
+                      </span>
+                    )}
+                    <Button
+                      onClick={() =>
+                        void navigator.clipboard.writeText(
+                          JSON.stringify(selected, null, 2)
+                        )
+                      }
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      Copy JSON
+                    </Button>
+                    <Button
+                      aria-label="Close row details"
+                      onClick={() => setPicked(null)}
+                      size="icon-sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Icon kind="close" />
+                    </Button>
+                  </header>
+                  <dl>
+                    {columns.map((column) => (
+                      <div key={column}>
+                        <dt>
+                          <span>{column}</span>
+                          <span>{types[column]}</span>
+                        </dt>
+                        <dd
+                          data-empty={selected[column] == null || undefined}
+                          data-type={types[column]}
+                        >
+                          {types[column] === "url" &&
+                          isUrl(selected[column]) ? (
+                            <a
+                              href={String(selected[column])}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              {String(selected[column])}
+                            </a>
+                          ) : (
+                            cellText(selected[column], "null")
+                          )}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {writer && (
+                    <p className="workflow-data-writer">
+                      Written by {writer.name}
+                    </p>
+                  )}
+                </aside>
+              )}
+            </div>
           )}
 
           {view === "schema" && (
