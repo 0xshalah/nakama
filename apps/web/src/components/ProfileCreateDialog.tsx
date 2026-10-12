@@ -23,6 +23,7 @@ import {
 } from "react";
 import {
   BUILT_IN_AGENT,
+  DEFAULT_TOOL_IDS,
   ProfileCreateDialogForm,
 } from "@/components/profile-create-dialog-form";
 import {
@@ -54,6 +55,7 @@ const PROFILE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 type ProfileCreateFormState = {
   submitError: string | null;
   name: string;
+  prompt: string;
   profileId: string;
   avatarPreview: string | null;
   agentId: string;
@@ -76,9 +78,21 @@ const initialProfileCreateFormState: ProfileCreateFormState = {
   avatarPreview: null,
   name: "",
   profileId: "",
+  prompt: "",
   submitError: null,
   toolIds: [],
 };
+
+function initProfileCreateFormState(
+  tools: ToolSummary[]
+): ProfileCreateFormState {
+  const available = new Set(tools.map((tool) => tool.id));
+
+  return {
+    ...initialProfileCreateFormState,
+    toolIds: DEFAULT_TOOL_IDS.filter((id) => available.has(id)),
+  };
+}
 
 function profileCreateFormReducer(
   state: ProfileCreateFormState,
@@ -161,7 +175,8 @@ function ProfileCreateDialogContent({
 
   const [form, dispatch] = useReducer(
     profileCreateFormReducer,
-    initialProfileCreateFormState
+    tools,
+    initProfileCreateFormState
   );
 
   const avatarFileRef = useRef<File | null>(null);
@@ -235,7 +250,7 @@ function ProfileCreateDialogContent({
       const response = await createMutation.mutateAsync({
         id: profileIdTrimmed || undefined,
         name: form.name.trim(),
-        systemPrompt: defaultCreatePrompt,
+        systemPrompt: form.prompt.trim() || defaultCreatePrompt,
       });
 
       const avatarFile = avatarFileRef.current;
@@ -291,28 +306,26 @@ function ProfileCreateDialogContent({
         onSubmit={handleSubmit}
       >
         <DialogHeader className="gap-2">
-          <DialogTitle>Create agent</DialogTitle>
-          <DialogDescription>
-            Set a name. Agent id is optional.
-            {onAskSuperBot ? (
-              <>
-                {" "}
-                Or{" "}
-                <button
-                  className="text-foreground underline underline-offset-2"
-                  disabled={busy}
-                  onClick={() => {
-                    onOpenChange(false);
-                    onAskSuperBot();
-                  }}
-                  type="button"
-                >
-                  ask Super Bot
-                </button>{" "}
-                to draft from chat.
-              </>
-            ) : null}
-          </DialogDescription>
+          <DialogTitle className="text-xl">
+            What do you need help with?
+          </DialogTitle>
+          {onAskSuperBot ? (
+            <DialogDescription>
+              Or{" "}
+              <button
+                className="text-foreground underline underline-offset-2"
+                disabled={busy}
+                onClick={() => {
+                  onOpenChange(false);
+                  onAskSuperBot();
+                }}
+                type="button"
+              >
+                ask Super Bot
+              </button>{" "}
+              to draft from chat.
+            </DialogDescription>
+          ) : null}
         </DialogHeader>
 
         <ProfileCreateDialogForm
@@ -347,6 +360,12 @@ function ProfileCreateDialogContent({
               values: { profileId: value, submitError: null },
             });
           }}
+          onPromptChange={(value) => {
+            dispatch({
+              type: "patch",
+              values: { prompt: value, submitError: null },
+            });
+          }}
           onToolsChange={(toolIds) => {
             dispatch({ type: "patch", values: { submitError: null, toolIds } });
           }}
@@ -355,6 +374,7 @@ function ProfileCreateDialogContent({
           profileIdHasValue={profileIdHasValue}
           profileIdHelpText={profileIdHelpText}
           profileIdValid={profileIdValid}
+          prompt={form.prompt}
           selectedToolIds={toolIdSet}
           submitError={form.submitError}
           tools={tools}
@@ -373,7 +393,7 @@ function ProfileCreateDialogContent({
             disabled={busy || !form.name.trim() || !profileIdValid}
             type="submit"
           >
-            {busy ? <Spinner className="size-4" /> : "Create"}
+            {busy ? <Spinner className="size-4" /> : "Create agent"}
           </Button>
         </DialogFooter>
       </form>
