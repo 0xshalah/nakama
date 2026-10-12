@@ -8,6 +8,8 @@ import {
   Add01Icon,
   Camera01Icon,
   Delete02Icon,
+  DiceFaces05Icon,
+  Undo02Icon,
   Upload04Icon,
   UserGroup02Icon,
 } from "hugeicons-react";
@@ -120,10 +122,19 @@ export function EditableProfileAvatar({
   const [colorIndex, setColorIndex] = useState(
     () => moodstoneIndexes(profile.id || profile.name || "?").colorIndex
   );
+  const [previewAvatarIndex, setPreviewAvatarIndex] = useState<number | null>(
+    null
+  );
 
   return (
     <>
-      <Popover onOpenChange={setOpen} open={open}>
+      <Popover
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          setPreviewAvatarIndex(null);
+        }}
+        open={open}
+      >
         <PopoverTrigger
           aria-label="Change profile image"
           className="group relative shrink-0 rounded-full transition-transform duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 active:not-disabled:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
@@ -138,39 +149,96 @@ export function EditableProfileAvatar({
         </PopoverTrigger>
         <PopoverContent
           align="center"
-          className="flex w-auto min-w-0 flex-col gap-3 p-3"
+          className="flex w-68 min-w-0 flex-col gap-0.5 p-1.5"
         >
-          <div className="grid grid-cols-7 gap-1">
+          <div
+            className="relative mb-1 flex h-33 items-center justify-center rounded-lg transition-colors duration-150 ease-out"
+            style={{ backgroundColor: `${moodstoneColors[colorIndex].lit}4d` }}
+          >
+            {previewAvatarIndex === null ? (
+              <ProfileAvatar
+                active
+                className="size-20 rounded-none outline-none"
+                profile={profile}
+                size="lg"
+              />
+            ) : (
+              <img
+                alt="Avatar preview"
+                className="size-20"
+                height={80}
+                src={`data:image/svg+xml,${encodeURIComponent(
+                  moodstoneSvg(
+                    previewAvatarIndex,
+                    colorIndex,
+                    !window.matchMedia("(prefers-reduced-motion: reduce)")
+                      .matches
+                  )
+                )}`}
+                width={80}
+              />
+            )}
+            {previewAvatarIndex === null ? null : (
+              <Button
+                aria-label="Undo"
+                className="absolute top-2 left-2 bg-background/85 shadow-xs"
+                onClick={() => setPreviewAvatarIndex(null)}
+                size="icon"
+                variant="ghost"
+              >
+                <Undo02Icon aria-hidden />
+              </Button>
+            )}
+            <Button
+              aria-label="Shuffle"
+              className="absolute top-2 right-2 bg-background/85 shadow-xs"
+              onClick={() => {
+                setPreviewAvatarIndex(
+                  Math.floor(Math.random() * moodstoneAvatars.length)
+                );
+                setColorIndex(
+                  Math.floor(Math.random() * moodstoneColors.length)
+                );
+              }}
+              size="icon"
+              variant="ghost"
+            >
+              <DiceFaces05Icon aria-hidden />
+            </Button>
+          </div>
+          <div className="grid grid-cols-7 gap-0.5 px-1.5 pt-0.5 pb-1">
             {moodstoneAvatars.map((avatar, avatarIndex) => (
               <button
-                aria-label={`Use ${avatar.cut} avatar`}
-                className="cursor-pointer rounded-full p-0.5 transition-transform duration-150 ease-out hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                aria-label={`Preview ${avatar.cut} avatar`}
+                aria-pressed={avatarIndex === previewAvatarIndex}
+                className={cn(
+                  "flex h-9 cursor-pointer items-center justify-center rounded-lg transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                  avatarIndex === previewAvatarIndex &&
+                    "bg-muted ring-[1.5px] ring-foreground ring-inset"
+                )}
                 key={avatar.cut}
-                onClick={() => {
-                  setOpen(false);
-                  void onPreset(moodstoneSvg(avatarIndex, colorIndex));
-                }}
+                onClick={() => setPreviewAvatarIndex(avatarIndex)}
                 type="button"
               >
                 <img
                   alt=""
-                  className="size-9 rounded-full"
-                  height={36}
+                  className="size-7"
+                  height={28}
                   src={`data:image/svg+xml,${encodeURIComponent(
                     moodstoneSvg(avatarIndex, colorIndex)
                   )}`}
-                  width={36}
+                  width={28}
                 />
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-12 gap-1">
+          <div className="grid grid-cols-12 justify-items-center gap-0.5 px-2 pt-1 pb-2">
             {moodstoneColors.map((color, index) => (
               <button
                 aria-label={`${color.name} color`}
                 aria-pressed={index === colorIndex}
                 className={cn(
-                  "size-5 cursor-pointer rounded-full outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring",
+                  "size-4 cursor-pointer rounded-full outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring",
                   index === colorIndex && "outline-2 outline-foreground"
                 )}
                 key={color.name}
@@ -182,34 +250,46 @@ export function EditableProfileAvatar({
               />
             ))}
           </div>
-          <div className="flex gap-2">
+          {previewAvatarIndex === null ? null : (
             <Button
-              className="flex-1"
+              className="mb-1"
+              onClick={() => {
+                setPreviewAvatarIndex(null);
+                setOpen(false);
+                void onPreset(moodstoneSvg(previewAvatarIndex, colorIndex));
+              }}
+              size="lg"
+            >
+              Apply
+            </Button>
+          )}
+          <div className="-mx-1.5 my-0.5 h-px bg-border" />
+          <Button
+            className="justify-start gap-2.5 font-normal"
+            onClick={() => {
+              setOpen(false);
+              onPick();
+            }}
+            size="lg"
+            variant="ghost"
+          >
+            <Upload04Icon aria-hidden className="text-muted-foreground" />
+            Upload image…
+          </Button>
+          {profile.hasAvatar && onRemove ? (
+            <Button
+              className="justify-start gap-2.5 font-normal text-destructive hover:text-destructive"
               onClick={() => {
                 setOpen(false);
-                onPick();
+                setRemoveOpen(true);
               }}
-              size="sm"
-              variant="outline"
+              size="lg"
+              variant="ghost"
             >
-              <Upload04Icon aria-hidden className="size-4" />
-              Upload image
+              <Delete02Icon aria-hidden />
+              Remove image
             </Button>
-            {profile.hasAvatar && onRemove ? (
-              <Button
-                className="flex-1"
-                onClick={() => {
-                  setOpen(false);
-                  setRemoveOpen(true);
-                }}
-                size="sm"
-                variant="outline"
-              >
-                <Delete02Icon aria-hidden className="size-4" />
-                Remove image
-              </Button>
-            ) : null}
-          </div>
+          ) : null}
         </PopoverContent>
       </Popover>
       {removeOpen && onRemove ? (

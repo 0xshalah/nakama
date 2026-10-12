@@ -79,7 +79,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
               className={cn(
                 "group relative flex size-7 shrink-0 items-center justify-center rounded-md transition-all duration-150",
                 active
-                  ? "bg-background shadow-sm ring-2 ring-primary ring-offset-1 ring-offset-sidebar/60"
+                  ? "ring-1 ring-foreground/20 ring-offset-2 ring-offset-sidebar"
                   : "hover:bg-muted/40"
               )}
               onClick={() => handleSelectProfile(profile.id)}
