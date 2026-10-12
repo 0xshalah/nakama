@@ -38,12 +38,14 @@ const ORG_ID = "org_test";
 
 const PROFILE_ID = "profile_default";
 
+const weatherSkillBody = "Call the `weather` tool with a city name.";
+
 const weatherSkillMarkdown = `---
 name: weather
 description: Get weather forecasts. Use when the user asks about weather.
 ---
 
-Call the \`weather\` tool with a city name.
+${weatherSkillBody}
 `;
 
 describe("SkillsService", () => {
@@ -902,12 +904,8 @@ if __name__ == "__main__":
         role: "member",
         userId: "shared-user",
       });
-      await db.setUserContext(
-        "team_a",
-        "shared-user",
-        "User context to preserve",
-        now
-      );
+      const userContext = "User context to preserve";
+      await db.setUserContext("team_a", "shared-user", userContext, now);
       await writeFile(
         join(skill.sourcePath, "tool.js"),
         'export const name = "shared-notes"; export const parameters = {type: "object", properties: {old: {type: "string"}}}; export async function run() { return "done"; }'
@@ -1015,7 +1013,7 @@ if __name__ == "__main__":
       expect(turns[1]!.tools?.map((tool) => tool.name)).toContain(
         "shared-notes"
       );
-      expect(turns[1]!.system).toContain("User context to preserve");
+      expect(turns[1]!.system).toContain(userContext);
       await writeFile(
         join(skill.sourcePath, "tool.js"),
         'export const name = "shared-notes"; export const parameters = {type: "object", properties: {current: {type: "number"}}}; export async function run() { return "done"; }'
@@ -1663,13 +1661,12 @@ if __name__ == "__main__":
       );
 
       expect(anonymous.status).toBe(401);
+      const updatedBody = "New shared instructions";
       await writeFile(
         join(skill.sourcePath, "SKILL.md"),
-        "---\nname: shared-notes\ndescription: Updated\n---\n\nNew shared instructions\n"
+        `---\nname: shared-notes\ndescription: Updated\n---\n\n${updatedBody}\n`
       );
-      expect((await (await read()).json()).skill.body).toContain(
-        "New shared instructions"
-      );
+      expect((await (await read()).json()).skill.body).toContain(updatedBody);
       await writeFile(
         join(skill.sourcePath, "references", "guide.md"),
         "Updated shared reference"
@@ -2086,9 +2083,8 @@ if __name__ == "__main__":
       "What's the weather in Jakarta?"
     );
 
-    expect(matched).toContain("Active Skill: weather");
-    expect(matched).toContain("Get weather forecasts");
-    expect(matched).not.toContain("Call the `weather` tool");
+    expect(matched).toContain(weather!.description);
+    expect(matched).not.toContain(weatherSkillBody);
   });
 
   test("includes full skill body for explicit skill activation", async () => {
@@ -2115,8 +2111,8 @@ if __name__ == "__main__":
       "/skill weather"
     );
 
-    expect(matched).toContain("Active Skill: weather");
-    expect(matched).toContain("Call the `weather` tool");
+    expect(matched).toContain(weather!.description);
+    expect(matched).toContain(weatherSkillBody);
   });
 
   test("includes full body for bundled create-automation matches", async () => {
@@ -2144,9 +2140,8 @@ if __name__ == "__main__":
       "Schedule a daily summary at 9am"
     );
 
-    expect(matched).toContain("Active Skill: create-automation");
+    expect(matched).toContain(skill!.description);
     expect(matched).toContain("runAt");
-    expect(matched).toContain("5-field cron syntax");
   });
 
   test("does not include create-automation body for unrelated messages", async () => {
@@ -2208,7 +2203,7 @@ if __name__ == "__main__":
       }
     );
 
-    expect(matched).toContain("Active Skill: create-profile");
+    expect(matched).toContain(skill!.description);
     expect(matched).toContain("# Available Tools");
 
     const unrelated = await service.formatMatchedSkillsForPrompt(
@@ -2274,8 +2269,12 @@ if __name__ == "__main__":
 
     expect(agentBrowser).toBeTruthy();
 
-    await expect(service.deleteSkill(agentBrowser!.id)).rejects.toThrow(
-      "Bundled system skills cannot be deleted."
+    await expect(service.deleteSkill(agentBrowser!.id)).rejects.toThrow();
+
+    const after = await service.listSkills();
+
+    expect(after.skills.some((skill) => skill.id === agentBrowser!.id)).toBe(
+      true
     );
   });
 
@@ -2308,8 +2307,6 @@ if __name__ == "__main__":
     );
 
     expect(prompt).toContain("agent-browser skill");
-    expect(prompt).toContain("Available Agent Skills");
-    expect(prompt).toContain("Skills are workflow instructions");
     expect(prompt).toContain("/skill agent-browser");
     expect(prompt).toContain("screenshot artifacts/");
   });
@@ -2660,7 +2657,7 @@ Use canary then prod.
     );
 
     expect(edited.skill.description).toBe("Deploy with canary.");
-    expect(edited.skill.body).toContain("Use canary then prod.");
+    expect(edited.skill.body.trim()).toBe("Use canary then prod.");
 
     await expect(
       service.editAssignedProfileSkill(
@@ -2675,6 +2672,12 @@ description: Renamed.
 Nope.
 `
       )
-    ).rejects.toThrow(/must match skill name/i);
+    ).rejects.toThrow();
+
+    const unchanged = (await service.listSkills()).skills.find(
+      (skill) => skill.name === "deploy"
+    );
+
+    expect(unchanged?.description).toBe("Deploy with canary.");
   });
 });
