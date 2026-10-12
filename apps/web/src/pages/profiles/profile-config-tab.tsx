@@ -221,6 +221,15 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
             profileId={detail.id}
             state={state}
           />
+          {(showChannels || canCreateProfile) && selectedId ? (
+            <ProfileFooterActions
+              onExport={() => setExportOpen(true)}
+              onMove={() => setMoveOpen(true)}
+              showAdmin={canCreateProfile}
+              showPack={showChannels}
+              state={state}
+            />
+          ) : null}
         </Tabs.Panel>
         {showChannels ? (
           <Tabs.Panel className="w-0 min-w-full" value="channels">
@@ -268,15 +277,6 @@ export function ProfileConfigTab({ state }: { state: ProfilesPageState }) {
           />
         </Tabs.Panel>
       </Tabs.Root>
-      {(showChannels || canCreateProfile) && selectedId ? (
-        <ProfileFooterActions
-          onExport={() => setExportOpen(true)}
-          onMove={() => setMoveOpen(true)}
-          showAdmin={canCreateProfile}
-          showPack={showChannels}
-          state={state}
-        />
-      ) : null}
       <MoveProfileDialog
         onOpenChange={setMoveOpen}
         open={moveOpen}
