@@ -53,6 +53,7 @@ import type {
   CreateOrganizationRequest,
   CreateOrganizationResponse,
   CreateProfileRequest,
+  CreateProfileWithSuperBotRequest,
   CreateProviderRequest,
   CreateProviderResponse,
   CreateSessionRequest,
@@ -1041,6 +1042,15 @@ export class NakamaClient {
 
   async createProfile(request: CreateProfileRequest): Promise<ProfileResponse> {
     return this.request<ProfileResponse>("/v1/profiles", {
+      body: JSON.stringify(request),
+      method: "POST",
+    });
+  }
+
+  async createProfileWithSuperBot(
+    request: CreateProfileWithSuperBotRequest
+  ): Promise<ProfileResponse> {
+    return this.request<ProfileResponse>("/v1/profiles/with-super-bot", {
       body: JSON.stringify(request),
       method: "POST",
     });

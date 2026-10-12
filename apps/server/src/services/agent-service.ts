@@ -30,6 +30,7 @@ import type {
   ConfigureProviderRequest,
   ConfigureProviderResponse,
   CreateProfileRequest,
+  CreateProfileWithSuperBotRequest,
   CreateProviderRequest,
   CreateProviderResponse,
   CreateSkillRequest,
@@ -3978,6 +3979,61 @@ export class AgentService {
     request: CreateProfileRequest
   ): Promise<ProfileResponse> {
     return this.profileService.createProfile(orgId, request);
+  }
+
+  async createProfileWithSuperBot(
+    orgId: string,
+    request: CreateProfileWithSuperBotRequest
+  ): Promise<ProfileResponse> {
+    const superBot = (await this.db.listProfilesForOrg(orgId)).find(
+      (profile) => profile.isSuper
+    );
+
+    if (!superBot) {
+      throw new Error("Super Bot is not available in this organization.");
+    }
+
+    const nameLine = request.name
+      ? `Use the name "${request.name}".`
+      : "Pick a short name.";
+
+    let createdProfileId: string | null = null;
+
+    await this.runAutomationPrompt(
+      orgId,
+      superBot.id,
+      [
+        "Create one new agent for the request below. Do not ask for confirmation. Call create_profile exactly once with name and soulFiles (SOUL.md and INSTRUCTIONS.md), then stop.",
+        nameLine,
+        `Request: ${request.prompt}`,
+      ].join("\n"),
+      undefined,
+      undefined,
+      {
+        onChunk() {},
+        onToolEnd(event) {
+          // SAFETY: create_profile returns { type: "profile_created", profile }; every field is checked below.
+          const result = event.result as {
+            profile?: { id?: string };
+            type?: string;
+          } | null;
+
+          if (
+            event.tool === "create_profile" &&
+            result?.type === "profile_created" &&
+            result.profile?.id
+          ) {
+            createdProfileId = result.profile.id;
+          }
+        },
+      }
+    );
+
+    if (!createdProfileId) {
+      throw new Error("Super Bot did not create an agent.");
+    }
+
+    return this.profileService.getProfile(orgId, createdProfileId);
   }
 
   async updateProfile(

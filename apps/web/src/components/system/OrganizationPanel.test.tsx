@@ -711,7 +711,7 @@ test("team detail shows readiness from stored counts without switching", async (
   );
 
   expect(container.querySelector("h2")?.textContent).toBe("Team team-a");
-  expect(container.textContent).toContain("2 of 5 steps done");
+  expect(container.textContent).toContain("2/5");
   expect(container.textContent).toContain("Add person");
   expect(container.textContent).not.toContain("Add knowledge");
   expect(container.textContent).toContain("team-b");

@@ -180,6 +180,208 @@ function TeamAddPersonDialog({
   );
 }
 
+function ReadinessCard({
+  busy,
+  doneCount,
+  nextStep,
+  onOpen,
+  steps,
+  total,
+}: {
+  busy: boolean;
+  doneCount: number;
+  nextStep: TeamStep | undefined;
+  onOpen: (open: () => void) => void;
+  steps: TeamStep[];
+  total: number;
+}) {
+  return (
+    <Card className="gap-0 overflow-hidden py-0 shadow-none">
+      <div className="flex items-center gap-4 px-6 py-5">
+        <ProgressRing done={doneCount} total={total} />
+        <div className="space-y-0.5">
+          <h3 className="font-semibold text-lg">Get your team ready</h3>
+          <p className="text-muted-foreground text-sm">
+            {total - doneCount === 0
+              ? "All steps done"
+              : `${total - doneCount} ${total - doneCount === 1 ? "step" : "steps"} left`}
+          </p>
+        </div>
+      </div>
+      <ul className="divide-y divide-border border-border border-t">
+        <li className="flex items-center gap-4 px-6 py-4 text-muted-foreground">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <Tick02Icon aria-hidden className="size-4" />
+          </span>
+          <span className="line-through">Create your team</span>
+        </li>
+        {steps.map((step, index) => {
+          const active = step === nextStep;
+
+          return (
+            <li
+              className={`flex items-center gap-4 px-6 py-4 ${active ? "bg-primary/5" : ""}`}
+              key={step.title}
+            >
+              {step.done ? (
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <Tick02Icon aria-hidden className="size-4" />
+                </span>
+              ) : (
+                <span
+                  aria-hidden
+                  className={`flex size-7 shrink-0 items-center justify-center rounded-full border-2 font-semibold text-xs ${active ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
+                >
+                  {index + 2}
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p
+                  className={
+                    step.done
+                      ? "text-muted-foreground line-through"
+                      : "font-medium"
+                  }
+                >
+                  {step.title}
+                </p>
+                {!step.done && (
+                  <p className="text-muted-foreground text-sm">
+                    {step.description}
+                  </p>
+                )}
+              </div>
+              {!step.done && (
+                <Button
+                  disabled={busy}
+                  onClick={() => onOpen(step.onOpen)}
+                  type="button"
+                  variant={active ? "default" : "outline"}
+                >
+                  {step.action}
+                </Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
+function DeleteTeamDialog({
+  deleting,
+  error,
+  onConfirm,
+  onOpenChange,
+  open,
+  teamName,
+}: {
+  deleting: boolean;
+  error: string | null;
+  onConfirm: () => void;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  teamName: string;
+}) {
+  return (
+    <Dialog
+      onOpenChange={(open) => {
+        if (!(open || deleting)) {
+          onOpenChange(false);
+        }
+      }}
+      open={open}
+    >
+      <DialogContent className="gap-6 p-6 sm:max-w-md">
+        <DialogHeader className="gap-3">
+          <DialogTitle>Delete team?</DialogTitle>
+          <DialogDescription>
+            {teamName} will disappear from the switcher and chat. Members,
+            profiles, and files stay on disk. Nakama cannot restore it.
+          </DialogDescription>
+        </DialogHeader>
+        {error && (
+          <p className="text-destructive text-sm" role="alert">
+            {error}
+          </p>
+        )}
+        <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+          <Button
+            disabled={deleting}
+            onClick={() => onOpenChange(false)}
+            type="button"
+            variant="outline"
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={deleting}
+            onClick={onConfirm}
+            type="button"
+            variant="destructive"
+          >
+            {deleting ? <Spinner className="size-4" /> : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TeamHeader({
+  busy,
+  onWork,
+  showWork,
+  team,
+}: {
+  busy: boolean;
+  onWork: () => void;
+  showWork: boolean;
+  team: { memberCount: number; name: string };
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="min-w-0 space-y-1">
+        <Link
+          className="inline-flex items-center gap-1.5 text-muted-foreground text-sm"
+          to={PAGE_PATHS.organization}
+        >
+          <ArrowLeft02Icon aria-hidden className="size-4" />
+          Back to organization
+        </Link>
+        <h2 className="break-words font-semibold text-3xl tracking-tight">
+          {team.name}
+        </h2>
+        <p className="text-muted-foreground text-sm">
+          {team.memberCount} {team.memberCount === 1 ? "person" : "people"}
+        </p>
+      </div>
+      {showWork && (
+        <Button disabled={busy} onClick={onWork} type="button">
+          Work in this team
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function TeamMissing({ loading }: { loading: boolean }) {
+  return (
+    <section className="mx-auto min-w-0 max-w-3xl space-y-3">
+      <Link
+        className="text-muted-foreground text-sm"
+        to={PAGE_PATHS.organization}
+      >
+        Back to organization
+      </Link>
+      <p className="text-muted-foreground text-sm" role="status">
+        {loading ? "Loading team…" : "Team not found"}
+      </p>
+    </section>
+  );
+}
+
 export function TeamDetailPage() {
   const { teamId } = useParams();
   const { activeOrg, archiveOrg, switchOrg, user } = useAuth();
@@ -201,30 +403,16 @@ export function TeamDetailPage() {
   );
 
   const foundTeam = overview.data?.teams.find((entry) => entry.id === teamId);
-  const lastTeam = useRef(foundTeam);
+  const [lastTeam, setLastTeam] = useState(foundTeam);
 
-  if (foundTeam) {
-    lastTeam.current = foundTeam;
+  if (foundTeam && foundTeam !== lastTeam) {
+    setLastTeam(foundTeam);
   }
 
-  const team =
-    foundTeam ??
-    (lastTeam.current?.id === teamId ? lastTeam.current : undefined);
+  const team = foundTeam ?? (lastTeam?.id === teamId ? lastTeam : undefined);
 
   if (!team) {
-    return (
-      <section className="mx-auto min-w-0 max-w-3xl space-y-3">
-        <Link
-          className="text-muted-foreground text-sm"
-          to={PAGE_PATHS.organization}
-        >
-          Back to organization
-        </Link>
-        <p className="text-muted-foreground text-sm" role="status">
-          {overview.isLoading ? "Loading team…" : "Team not found"}
-        </p>
-      </section>
-    );
+    return <TeamMissing loading={overview.isLoading} />;
   }
 
   const canWork = team.isCurrent || team.canSwitch;
@@ -308,107 +496,25 @@ export function TeamDetailPage() {
 
   return (
     <section className="mx-auto min-w-0 max-w-3xl space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 space-y-1">
-          <Link
-            className="inline-flex items-center gap-1.5 text-muted-foreground text-sm"
-            to={PAGE_PATHS.organization}
-          >
-            <ArrowLeft02Icon aria-hidden className="size-4" />
-            Back to organization
-          </Link>
-          <h2 className="break-words font-semibold text-3xl tracking-tight">
-            {team.name}
-          </h2>
-          <p className="text-muted-foreground text-sm">
-            {team.memberCount} {team.memberCount === 1 ? "person" : "people"}
-          </p>
-        </div>
-        {canWork && !team.isCurrent && (
-          <Button
-            disabled={pending}
-            onClick={() => void openIn(() => navigate(PAGE_PATHS.chat))}
-            type="button"
-          >
-            Work in this team
-          </Button>
-        )}
-      </div>
+      <TeamHeader
+        busy={pending}
+        onWork={() => void openIn(() => navigate(PAGE_PATHS.chat))}
+        showWork={canWork && !team.isCurrent}
+        team={team}
+      />
       {error && (
         <p className="text-destructive text-sm" role="alert">
           {error}
         </p>
       )}
-      <Card className="gap-0 overflow-hidden py-0 shadow-none">
-        <div className="flex items-center gap-4 px-6 py-5">
-          <ProgressRing done={doneCount} total={total} />
-          <div className="space-y-0.5">
-            <h3 className="font-semibold text-lg">Get your team ready</h3>
-            <p className="text-muted-foreground text-sm">
-              {total - doneCount === 0
-                ? "All steps done"
-                : `${total - doneCount} ${total - doneCount === 1 ? "step" : "steps"} left`}
-            </p>
-          </div>
-        </div>
-        <ul className="divide-y divide-border border-border border-t">
-          <li className="flex items-center gap-4 px-6 py-4 text-muted-foreground">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-              <Tick02Icon aria-hidden className="size-4" />
-            </span>
-            <span className="line-through">Create your team</span>
-          </li>
-          {steps.map((step, index) => {
-            const active = step === nextStep;
-
-            return (
-              <li
-                className={`flex items-center gap-4 px-6 py-4 ${active ? "bg-primary/5" : ""}`}
-                key={step.title}
-              >
-                {step.done ? (
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                    <Tick02Icon aria-hidden className="size-4" />
-                  </span>
-                ) : (
-                  <span
-                    aria-hidden
-                    className={`flex size-7 shrink-0 items-center justify-center rounded-full border-2 font-semibold text-xs ${active ? "border-primary text-primary" : "border-border text-muted-foreground"}`}
-                  >
-                    {index + 2}
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p
-                    className={
-                      step.done
-                        ? "text-muted-foreground line-through"
-                        : "font-medium"
-                    }
-                  >
-                    {step.title}
-                  </p>
-                  {!step.done && (
-                    <p className="text-muted-foreground text-sm">
-                      {step.description}
-                    </p>
-                  )}
-                </div>
-                {!step.done && (
-                  <Button
-                    disabled={pending || !canWork}
-                    onClick={() => void openIn(step.onOpen)}
-                    type="button"
-                    variant={active ? "default" : "outline"}
-                  >
-                    {step.action}
-                  </Button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </Card>
+      <ReadinessCard
+        busy={pending || !canWork}
+        doneCount={doneCount}
+        nextStep={nextStep}
+        onOpen={(open) => void openIn(open)}
+        steps={steps}
+        total={total}
+      />
       <Card className="gap-0 py-0 shadow-none">
         <details className="group">
           <summary className="flex cursor-pointer items-center justify-between gap-3 px-6 py-4">
@@ -448,47 +554,14 @@ export function TeamDetailPage() {
           </div>
         )}
       </Card>
-      <Dialog
-        onOpenChange={(open) => {
-          if (!(open || deleting)) {
-            setDeleteOpen(false);
-          }
-        }}
+      <DeleteTeamDialog
+        deleting={deleting}
+        error={deleteError}
+        onConfirm={() => void deleteTeam()}
+        onOpenChange={setDeleteOpen}
         open={deleteOpen}
-      >
-        <DialogContent className="gap-6 p-6 sm:max-w-md">
-          <DialogHeader className="gap-3">
-            <DialogTitle>Delete team?</DialogTitle>
-            <DialogDescription>
-              {team.name} will disappear from the switcher and chat. Members,
-              profiles, and files stay on disk. Nakama cannot restore it.
-            </DialogDescription>
-          </DialogHeader>
-          {deleteError && (
-            <p className="text-destructive text-sm" role="alert">
-              {deleteError}
-            </p>
-          )}
-          <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
-            <Button
-              disabled={deleting}
-              onClick={() => setDeleteOpen(false)}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={deleting}
-              onClick={() => void deleteTeam()}
-              type="button"
-              variant="destructive"
-            >
-              {deleting ? <Spinner className="size-4" /> : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        teamName={team.name}
+      />
       <ProfileCreateDialog
         agentPresets={agentPresets}
         onCreated={() => undefined}

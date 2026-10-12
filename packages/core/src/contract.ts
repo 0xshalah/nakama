@@ -2463,6 +2463,11 @@ export interface ProfileResponse {
   profile: ProfileDetail;
 }
 
+export interface CreateProfileWithSuperBotRequest {
+  name?: string;
+  prompt: string;
+}
+
 export interface CreateProfileRequest {
   id?: string;
   isSuper?: boolean;

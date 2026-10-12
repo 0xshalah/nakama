@@ -122,6 +122,7 @@ function useAuthSession() {
   const refreshSession = useCallback(async (shareMountLoad = false) => {
     const revision = authRevision.current;
     const requestRevision = ++sessionRequestRevision.current;
+
     const session = await (shareMountLoad
       ? loadMountSessionState()
       : loadSessionState());

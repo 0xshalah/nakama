@@ -23,17 +23,19 @@ import {
 } from "react";
 import {
   BUILT_IN_AGENT,
-  DEFAULT_TOOL_IDS,
   ProfileCreateDialogForm,
 } from "@/components/profile-create-dialog-form";
 import {
   useAssignToolMutation,
   useCreateProfileMutation,
+  useCreateProfileWithSuperBotMutation,
   useUpdateProfileMutation,
   useUploadProfileAvatarMutation,
 } from "@/hooks/use-resource-mutations";
 import { formatError } from "@/lib/client";
 import { readFileAsDataUrl } from "../lib/read-file-as-data-url";
+
+const DEFAULT_TOOL_IDS = ["web_search", "web_fetch", "write_file"];
 
 function fileToImageAttachment(file: File): Promise<ImageAttachment | null> {
   return readFileAsDataUrl(file).then(parseDataUrl, () => null);
@@ -49,6 +51,18 @@ interface ProfileCreateDialogProps {
 }
 
 const defaultCreatePrompt = "You are a helpful assistant.";
+
+function nameFromPrompt(prompt: string) {
+  const words = prompt.trim().split(/\s+/).filter(Boolean).slice(0, 4);
+
+  if (words.length === 0) {
+    return "New agent";
+  }
+
+  const title = words.join(" ").replace(/[.,;:!?]+$/, "");
+
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
 
 const PROFILE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
@@ -168,6 +182,7 @@ function ProfileCreateDialogContent({
   onAskSuperBot?: () => void;
 }) {
   const createMutation = useCreateProfileMutation();
+  const superBotCreateMutation = useCreateProfileWithSuperBotMutation();
   const uploadAvatarMutation = useUploadProfileAvatarMutation();
   const assignToolMutation = useAssignToolMutation();
   const updateProfileMutation = useUpdateProfileMutation();
@@ -183,6 +198,7 @@ function ProfileCreateDialogContent({
 
   const busy =
     createMutation.isPending ||
+    superBotCreateMutation.isPending ||
     uploadAvatarMutation.isPending ||
     assignToolMutation.isPending ||
     updateProfileMutation.isPending;
@@ -231,13 +247,12 @@ function ProfileCreateDialogContent({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
-    if (!(form.name.trim() && profileIdValid) || busy) {
+    if (!profileIdValid || busy) {
       dispatch({
         type: "patch",
         values: {
-          submitError: form.name.trim()
-            ? "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`."
-            : "Name is required.",
+          submitError:
+            "Agent id must start with a letter or number and only use letters, numbers, `_`, or `-`.",
         },
       });
 
@@ -247,11 +262,19 @@ function ProfileCreateDialogContent({
     dispatch({ type: "patch", values: { submitError: null } });
 
     try {
-      const response = await createMutation.mutateAsync({
-        id: profileIdTrimmed || undefined,
-        name: form.name.trim(),
-        systemPrompt: form.prompt.trim() || defaultCreatePrompt,
-      });
+      const prompt = form.prompt.trim();
+
+      const response =
+        prompt && !profileIdTrimmed
+          ? await superBotCreateMutation.mutateAsync({
+              name: form.name.trim() || undefined,
+              prompt,
+            })
+          : await createMutation.mutateAsync({
+              id: profileIdTrimmed || undefined,
+              name: form.name.trim() || nameFromPrompt(prompt),
+              systemPrompt: prompt || defaultCreatePrompt,
+            });
 
       const avatarFile = avatarFileRef.current;
 
@@ -389,10 +412,7 @@ function ProfileCreateDialogContent({
           >
             Cancel
           </Button>
-          <Button
-            disabled={busy || !form.name.trim() || !profileIdValid}
-            type="submit"
-          >
+          <Button disabled={busy || !profileIdValid} type="submit">
             {busy ? <Spinner className="size-4" /> : "Create agent"}
           </Button>
         </DialogFooter>

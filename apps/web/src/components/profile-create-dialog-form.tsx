@@ -39,20 +39,18 @@ const PROMPT_SUGGESTIONS = [
   },
 ];
 
-const TOOL_LABELS: Record<string, string> = {
-  bash: "Run commands",
-  email: "Send email",
-  knowledge_base_search: "Search our documents",
-  read_file: "Read files",
-  web_fetch: "Open web pages",
-  web_search: "Search the web",
-  write_file: "Write files",
-};
-
-export const DEFAULT_TOOL_IDS = ["web_search", "web_fetch", "write_file"];
+const TOOL_LABELS = new Map([
+  ["bash", "Run commands"],
+  ["email", "Send email"],
+  ["knowledge_base_search", "Search our documents"],
+  ["read_file", "Read files"],
+  ["web_fetch", "Open web pages"],
+  ["web_search", "Search the web"],
+  ["write_file", "Write files"],
+]);
 
 function toolLabel(tool: ToolSummary) {
-  return TOOL_LABELS[tool.id] ?? tool.name;
+  return TOOL_LABELS.get(tool.id) ?? tool.name;
 }
 
 export function ProfileCreateDialogForm({
@@ -108,6 +106,7 @@ export function ProfileCreateDialogForm({
     agentPresets.find((preset) => preset.id === agentId)?.label ?? "Nakama";
 
   const selectedTools = tools.filter((tool) => selectedToolIds.has(tool.id));
+
   const canActOutside = selectedTools.some(
     (tool) => tool.id === "email" || tool.id === "bash"
   );
@@ -191,104 +190,26 @@ export function ProfileCreateDialogForm({
               tools={tools}
             />
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <label
-                  className="font-medium text-sm"
-                  htmlFor="create-profile-id"
-                >
-                  Agent id
-                </label>
-                <Input
-                  aria-describedby="create-profile-id-help"
-                  aria-invalid={profileIdHasValue && !profileIdValid}
-                  className="font-mono text-sm"
-                  disabled={busy}
-                  id="create-profile-id"
-                  onChange={(event) => onProfileIdChange(event.target.value)}
-                  placeholder="research-assistant"
-                  value={profileId}
-                />
-              </div>
+            <AgentFields
+              agentId={agentId}
+              agentLabel={agentLabel}
+              agentPresets={agentPresets}
+              busy={busy}
+              onAgentChange={onAgentChange}
+              onProfileIdChange={onProfileIdChange}
+              profileId={profileId}
+              profileIdHasValue={profileIdHasValue}
+              profileIdHelpText={profileIdHelpText}
+              profileIdValid={profileIdValid}
+            />
 
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <label
-                  className="font-medium text-sm"
-                  htmlFor="create-profile-agent"
-                >
-                  Agent
-                </label>
-                <Select
-                  disabled={busy}
-                  onValueChange={(next) =>
-                    onAgentChange(next ?? BUILT_IN_AGENT)
-                  }
-                  value={agentId}
-                >
-                  <SelectTrigger className="w-full" id="create-profile-agent">
-                    <SelectValue>{agentLabel}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={BUILT_IN_AGENT}>Nakama</SelectItem>
-                    {agentPresets.map((preset) => (
-                      <SelectItem key={preset.id} value={preset.id}>
-                        {preset.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <p
-                className={cn(
-                  "text-xs sm:col-span-2",
-                  profileIdHasValue && !profileIdValid
-                    ? "text-destructive"
-                    : "text-muted-foreground"
-                )}
-                id="create-profile-id-help"
-              >
-                {profileIdHelpText}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {avatarPreview ? (
-                <img
-                  alt="Avatar preview"
-                  className="size-10 shrink-0 rounded-md border border-border object-cover"
-                  src={avatarPreview}
-                />
-              ) : null}
-              <input
-                accept="image/jpeg,image/png,image/gif,image/webp"
-                className="hidden"
-                disabled={busy}
-                onChange={onAvatarSelected}
-                ref={avatarInputRef}
-                type="file"
-              />
-              <Button
-                disabled={busy}
-                onClick={() => avatarInputRef.current?.click()}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                {avatarPreview ? "Change avatar" : "Choose avatar"}
-              </Button>
-              {avatarPreview ? (
-                <Button
-                  disabled={busy}
-                  onClick={onClearAvatar}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  Remove
-                </Button>
-              ) : null}
-            </div>
+            <AvatarPicker
+              avatarInputRef={avatarInputRef}
+              avatarPreview={avatarPreview}
+              busy={busy}
+              onAvatarSelected={onAvatarSelected}
+              onClearAvatar={onClearAvatar}
+            />
           </div>
         ) : null}
       </section>
@@ -301,10 +222,143 @@ export function ProfileCreateDialogForm({
           disabled={busy}
           id="create-profile-name"
           onChange={(event) => onNameChange(event.target.value)}
-          placeholder="Research assistant"
+          placeholder="Optional. We will name it."
           value={name}
         />
       </div>
+    </div>
+  );
+}
+
+function AvatarPicker({
+  avatarInputRef,
+  avatarPreview,
+  busy,
+  onAvatarSelected,
+  onClearAvatar,
+}: {
+  avatarInputRef: RefObject<HTMLInputElement | null>;
+  avatarPreview: string | null;
+  busy: boolean;
+  onAvatarSelected: (event: ChangeEvent<HTMLInputElement>) => void;
+  onClearAvatar: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      {avatarPreview ? (
+        <img
+          alt="Avatar preview"
+          className="size-10 shrink-0 rounded-md border border-border object-cover"
+          src={avatarPreview}
+        />
+      ) : null}
+      <input
+        accept="image/jpeg,image/png,image/gif,image/webp"
+        className="hidden"
+        disabled={busy}
+        onChange={onAvatarSelected}
+        ref={avatarInputRef}
+        type="file"
+      />
+      <Button
+        disabled={busy}
+        onClick={() => avatarInputRef.current?.click()}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
+        {avatarPreview ? "Change avatar" : "Choose avatar"}
+      </Button>
+      {avatarPreview ? (
+        <Button
+          disabled={busy}
+          onClick={onClearAvatar}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          Remove
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function AgentFields({
+  agentId,
+  agentLabel,
+  agentPresets,
+  busy,
+  onAgentChange,
+  onProfileIdChange,
+  profileId,
+  profileIdHasValue,
+  profileIdHelpText,
+  profileIdValid,
+}: {
+  agentId: string;
+  agentLabel: string;
+  agentPresets: AcpAgentPresetSummary[];
+  busy: boolean;
+  onAgentChange: (agentId: string) => void;
+  onProfileIdChange: (value: string) => void;
+  profileId: string;
+  profileIdHasValue: boolean;
+  profileIdHelpText: string;
+  profileIdValid: boolean;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <label className="font-medium text-sm" htmlFor="create-profile-id">
+          Agent id
+        </label>
+        <Input
+          aria-describedby="create-profile-id-help"
+          aria-invalid={profileIdHasValue && !profileIdValid}
+          className="font-mono text-sm"
+          disabled={busy}
+          id="create-profile-id"
+          onChange={(event) => onProfileIdChange(event.target.value)}
+          placeholder="research-assistant"
+          value={profileId}
+        />
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <label className="font-medium text-sm" htmlFor="create-profile-agent">
+          Agent
+        </label>
+        <Select
+          disabled={busy}
+          onValueChange={(next) => onAgentChange(next ?? BUILT_IN_AGENT)}
+          value={agentId}
+        >
+          <SelectTrigger className="w-full" id="create-profile-agent">
+            <SelectValue>{agentLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={BUILT_IN_AGENT}>Nakama</SelectItem>
+            {agentPresets.map((preset) => (
+              <SelectItem key={preset.id} value={preset.id}>
+                {preset.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <p
+        className={cn(
+          "text-xs sm:col-span-2",
+          profileIdHasValue && !profileIdValid
+            ? "text-destructive"
+            : "text-muted-foreground"
+        )}
+        id="create-profile-id-help"
+      >
+        {profileIdHelpText}
+      </p>
     </div>
   );
 }

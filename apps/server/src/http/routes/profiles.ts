@@ -1321,6 +1321,24 @@ export function registerProfileRoutes(
     return json<ProfileResponse>(await agent.createProfile(orgId, body), 201);
   });
 
+  app.post("/v1/profiles/with-super-bot", async (c) => {
+    requirePlatformAdminFromContext(c);
+    const orgId = requireActiveOrgIdFromContext(c);
+
+    const body = await readJson(
+      c.req.raw,
+      z.object({
+        name: z.string().trim().min(1).optional(),
+        prompt: z.string().trim().min(1),
+      })
+    );
+
+    return json<ProfileResponse>(
+      await agent.createProfileWithSuperBot(orgId, body),
+      201
+    );
+  });
+
   app.get("/v1/profiles/:profileId/soul", async (c) => {
     requirePlatformAdminFromContext(c);
     const orgId = requireActiveOrgIdFromContext(c);
