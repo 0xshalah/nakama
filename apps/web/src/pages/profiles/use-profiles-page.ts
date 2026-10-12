@@ -71,6 +71,27 @@ function fileToImageAttachment(file: File): Promise<ImageAttachment | null> {
   return readFileAsDataUrl(file).then(parseDataUrl, () => null);
 }
 
+/** The avatar API stores raster images only, so presets upload as PNG. */
+function svgToPngAttachment(svg: string): Promise<ImageAttachment> {
+  const size = 256;
+
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      canvas.getContext("2d")?.drawImage(image, 0, 0, size, size);
+      resolve({ data: canvas.toDataURL("image/png"), mediaType: "image/png" });
+    };
+
+    image.onerror = () => reject(new Error("Could not render the avatar."));
+
+    image.src = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  });
+}
+
 function isProfilesPageBusy(flags: {
   assignMcpPending: boolean;
   assignPending: boolean;
@@ -1186,6 +1207,23 @@ export function useProfilesPage() {
     }
   }
 
+  async function handleAvatarPreset(svg: string) {
+    if (!(selectedId && canManageProfile)) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await uploadAvatarMutation.mutateAsync({
+        attachment: await svgToPngAttachment(svg),
+        profileId: selectedId,
+      });
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
   async function handleAvatarRemove() {
     if (!(selectedId && canManageProfile)) {
       return;
@@ -1255,6 +1293,7 @@ export function useProfilesPage() {
     handleAssignMcpServer,
     handleAssignSkill,
     handleAssignTool,
+    handleAvatarPreset,
     handleAvatarRemove,
     handleAvatarSelected,
     handleCloneConfirm,

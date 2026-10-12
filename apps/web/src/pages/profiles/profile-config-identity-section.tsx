@@ -56,6 +56,7 @@ type IdentityState = Pick<
   | "isDirty"
   | "editPrompt"
   | "handleEditPromptChange"
+  | "handleAvatarPreset"
   | "handleAvatarSelected"
   | "handleAvatarRemove"
   | "acpAgentId"
@@ -87,6 +88,7 @@ export function ProfileConfigIdentitySection({
     flushSave,
     saveStatus,
     isDirty,
+    handleAvatarPreset,
     handleAvatarSelected,
     handleAvatarRemove,
   } = state;
@@ -118,6 +120,7 @@ export function ProfileConfigIdentitySection({
           deleteAvatarMutation.isPending
         }
         onPick={() => avatarInputRef.current?.click()}
+        onPreset={handleAvatarPreset}
         onRemove={handleAvatarRemove}
         profile={detail}
         size="lg"

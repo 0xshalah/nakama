@@ -204,7 +204,7 @@ describe("member-owned agents", () => {
           method: "PUT",
         })
       ).status
-    ).toBe(403);
+    ).toBe(200);
 
     // An admin cannot force-share a member's agent.
     expect(

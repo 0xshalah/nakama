@@ -2094,11 +2094,8 @@ export function registerProfileRoutes(
       );
 
       if (isOwner) {
-        // Host-run agents and the skill approval gate are admin controls.
-        if (
-          body.acpAgent !== undefined ||
-          body.skillsWriteApproval !== undefined
-        ) {
+        // Host-run agents are an admin control.
+        if (body.acpAgent !== undefined) {
           throw new NakamaApiError("Forbidden", 403);
         }
       } else {
