@@ -594,10 +594,9 @@ export function useProfilesQuery(orgId?: string | null) {
   return useQuery({
     enabled: orgId === undefined || Boolean(orgId),
     queryFn: async () => (await client.listProfiles()).profiles,
-    queryKey:
-      orgId === undefined
-        ? queryKeys.profiles.all
-        : [...queryKeys.profiles.all, orgId],
+    // One key for every caller, so the sidebar and the chat page share a
+    // request. The cache is cleared when the active org changes.
+    queryKey: queryKeys.profiles.all,
     staleTime: defaultStaleTime,
   });
 }
@@ -619,20 +618,22 @@ export function useAcpAgentPresetsQuery() {
   return useQuery(acpAgentPresetsQueryOptions);
 }
 
-export function useToolsQuery() {
-  return useQuery(toolsQueryOptions);
+export function useToolsQuery(options?: { enabled?: boolean }) {
+  return useQuery({ ...toolsQueryOptions, enabled: options?.enabled ?? true });
 }
 
 export function useMcpServersQuery({
+  enabled = true,
   refetchInterval,
 }: {
+  enabled?: boolean;
   refetchInterval?: number;
 } = {}) {
-  return useQuery({ ...mcpServersQueryOptions, refetchInterval });
+  return useQuery({ ...mcpServersQueryOptions, enabled, refetchInterval });
 }
 
-export function useSkillsQuery() {
-  return useQuery(skillsQueryOptions);
+export function useSkillsQuery(options?: { enabled?: boolean }) {
+  return useQuery({ ...skillsQueryOptions, enabled: options?.enabled ?? true });
 }
 
 function skillQueryOptions(skillId: string) {
