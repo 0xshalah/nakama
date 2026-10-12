@@ -4,10 +4,12 @@ import { Card } from "@nakama/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@nakama/ui/dialog";
+import { Spinner } from "@nakama/ui/spinner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tick02Icon } from "hugeicons-react";
 import { type FormEvent, useRef, useState } from "react";
@@ -22,6 +24,7 @@ import {
 } from "@/hooks/use-org-members";
 import { formatError } from "@/lib/client";
 import { PAGE_PATHS } from "@/lib/navigation";
+import { canArchiveOrganization } from "@/lib/org-archive";
 import { queryKeys } from "@/lib/query-keys";
 
 type TeamStep = {
@@ -140,12 +143,15 @@ function TeamAddPersonDialog({
 
 export function TeamDetailPage() {
   const { teamId } = useParams();
-  const { activeOrg, switchOrg } = useAuth();
+  const { activeOrg, archiveOrg, switchOrg, user } = useAuth();
   const navigate = useNavigate();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const running = useRef(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const overview = useOrganizationOverview(
     activeOrg?.id ?? null,
@@ -229,6 +235,25 @@ export function TeamDetailPage() {
     } finally {
       running.current = false;
       setPending(false);
+    }
+  }
+
+  async function deleteTeam() {
+    if (!team) {
+      return;
+    }
+
+    setDeleting(true);
+    setDeleteError(null);
+
+    try {
+      await archiveOrg(team.id);
+      setDeleteOpen(false);
+      navigate(PAGE_PATHS.organization);
+    } catch (cause) {
+      setDeleteError(formatError(cause));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -342,6 +367,65 @@ export function TeamDetailPage() {
           </dl>
         </details>
       </Card>
+      {canArchiveOrganization(user?.isPlatformAdmin === true) && (
+        <Card className="gap-0 py-0 shadow-none">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+            <h3 className="font-medium text-sm">Delete team</h3>
+            <Button
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteOpen(true);
+              }}
+              type="button"
+              variant="destructive"
+            >
+              Delete
+            </Button>
+          </div>
+          <Dialog
+            onOpenChange={(open) => {
+              if (!(open || deleting)) {
+                setDeleteOpen(false);
+              }
+            }}
+            open={deleteOpen}
+          >
+            <DialogContent className="gap-6 p-6 sm:max-w-md">
+              <DialogHeader className="gap-3">
+                <DialogTitle>Delete team?</DialogTitle>
+                <DialogDescription>
+                  {team.name} will disappear from the switcher and chat.
+                  Members, profiles, and files stay on disk. Nakama cannot
+                  restore it.
+                </DialogDescription>
+              </DialogHeader>
+              {deleteError && (
+                <p className="text-destructive text-sm" role="alert">
+                  {deleteError}
+                </p>
+              )}
+              <DialogFooter className="mx-0 mb-0 gap-2 border-0 bg-transparent p-0 sm:flex-row sm:justify-end">
+                <Button
+                  disabled={deleting}
+                  onClick={() => setDeleteOpen(false)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  disabled={deleting}
+                  onClick={() => void deleteTeam()}
+                  type="button"
+                  variant="destructive"
+                >
+                  {deleting ? <Spinner className="size-4" /> : "Delete"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </Card>
+      )}
       {activeOrg && (
         <TeamAddPersonDialog
           onOpenChange={setAddOpen}
