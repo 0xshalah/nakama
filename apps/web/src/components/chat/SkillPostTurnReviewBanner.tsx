@@ -109,7 +109,7 @@ export function SkillPostTurnReviewBanner({
   onApply,
   onDismiss,
 }: SkillPostTurnReviewBannerProps) {
-  const [openIds, setOpenIds] = useState<readonly string[]>([]);
+  const [openIds, setOpenIds] = useState<ReadonlySet<string>>(() => new Set());
 
   if (suggestions.length === 0 && pendingProposals.length === 0) {
     return null;
@@ -178,7 +178,7 @@ export function SkillPostTurnReviewBanner({
               warning.replace(/^Contains\s+/i, "").replace(/\.$/, "")
             );
 
-            const open = openIds.includes(suggestion.id);
+            const open = openIds.has(suggestion.id);
 
             return (
               <div className="-mx-3 text-sm" key={suggestion.id}>
@@ -211,11 +211,17 @@ export function SkillPostTurnReviewBanner({
                     aria-expanded={open}
                     className="-mx-1 inline-flex min-h-8 items-center gap-1 rounded px-1 font-medium text-foreground hover:bg-muted"
                     onClick={() =>
-                      setOpenIds((ids) =>
-                        open
-                          ? ids.filter((id) => id !== suggestion.id)
-                          : [...ids, suggestion.id]
-                      )
+                      setOpenIds((ids) => {
+                        const next = new Set(ids);
+
+                        if (open) {
+                          next.delete(suggestion.id);
+                        } else {
+                          next.add(suggestion.id);
+                        }
+
+                        return next;
+                      })
                     }
                     type="button"
                   >
