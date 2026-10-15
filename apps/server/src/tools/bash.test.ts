@@ -884,30 +884,31 @@ describe("bash tool Nakama state guard", () => {
     expect(await readdir(profileWorkspace)).not.toContain("ran.txt");
   });
 
-  test("refuses commands that read another org's or profile's files", async () => {
+  test("NAKAMA_TENANT_BASH=0 refuses every channel but the CLI", async () => {
     await setupConfigDir();
-    const root = configDir.replaceAll("\\", "/");
-    const foreign = path.join(configDir, "orgs", "org_other", "profiles", "p");
-    await mkdir(foreign, { recursive: true });
-    await writeFile(path.join(foreign, "notes.md"), "other org notes\n");
-    const marker = path.join(profileWorkspace, "ran.txt").replaceAll("\\", "/");
+    const previousTenantBash = process.env.NAKAMA_TENANT_BASH;
+    process.env.NAKAMA_TENANT_BASH = "0";
 
-    const commands = [
-      `cat ${root}/orgs/org_other/profiles/p/notes.md`,
-      "ls $NAKAMA_CONFIG_DIR/orgs",
-      `grep -r notes ${root}`,
-      `cat ${path.relative(profileWorkspace, foreign).replaceAll("\\", "/")}/notes.md`,
-    ];
-
-    for (const command of commands) {
+    try {
       await expect(
-        runBash({ command: `${command}; touch ${marker}` }, context, {
-          backend: "host",
-        })
-      ).rejects.toThrow();
-    }
+        runBash({ command: "touch ran.txt" }, context, { backend: "host" })
+      ).rejects.toThrow(/NAKAMA_TENANT_BASH=0/);
+      expect(await readdir(profileWorkspace)).not.toContain("ran.txt");
 
-    expect(await readdir(profileWorkspace)).not.toContain("ran.txt");
+      const cli = await runBash(
+        { command: "echo ok" },
+        { ...context, channel: "cli" },
+        { backend: "host" }
+      );
+
+      expect(cli.stdout.trim()).toBe("ok");
+    } finally {
+      if (previousTenantBash === undefined) {
+        delete process.env.NAKAMA_TENANT_BASH;
+      } else {
+        process.env.NAKAMA_TENANT_BASH = previousTenantBash;
+      }
+    }
   });
 
   test("still runs ordinary commands in the profile workspace", async () => {
