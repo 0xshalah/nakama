@@ -11,12 +11,10 @@ import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streami
 import { ChatCognitoControl } from "@/components/chat/chat-cognito-control";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
-import { ChatStarterPrompts } from "@/components/chat/chat-starter-prompts";
 import { ProviderSetupForm } from "@/components/ProviderSetupForm";
 import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-context";
 import { useChatUsageVisible } from "@/hooks/use-chat-usage-visible";
 import { usePostTurnSkillReviewOverlay } from "@/hooks/use-post-turn-skill-review-overlay";
-import { useHistorySessionsQuery } from "@/hooks/use-resource-mutations";
 import { formatSessionChannelLabel } from "@/lib/chat-history";
 import { sumChatUsage } from "@/lib/chat-usage";
 import { extractModelId } from "@/lib/models";
@@ -73,15 +71,6 @@ export function ChatPageContent(state: ChatPageState) {
   } = state;
 
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
-
-  // Shares the sidebar's query, so this costs no extra request.
-  const history = useHistorySessionsQuery(profileId);
-
-  const firstChat =
-    isEmptyState &&
-    !readOnlySession &&
-    !history.isLoading &&
-    history.data.length === 0;
 
   const cognitoControl = shouldShowCognitoControl(cognito, isEmptyState) ? (
     // Pinned to the column's top-right corner, which is the top right of the
@@ -183,7 +172,6 @@ export function ChatPageContent(state: ChatPageState) {
             profiles={profiles}
           />
           {composer}
-          {firstChat ? <ChatStarterPrompts /> : null}
         </div>
       </ChatPageColumn>
     </ChatAttachmentPanelProvider>
