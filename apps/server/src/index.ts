@@ -70,6 +70,7 @@ import { resolveComposioCallbackBaseUrl } from "./services/composio-callback-url
 import { ComposioService } from "./services/composio-service";
 import { claimLegacyCustomTools } from "./services/custom-tool-handlers";
 import { retireAppUserData } from "./services/data-portability";
+import { openaiProviderKey } from "./services/google-meet/actions";
 import { GoogleMeetService } from "./services/google-meet/service";
 import { LlmUsageTracker } from "./services/llm-usage-tracker";
 import { McpClientManager } from "./services/mcp-client-manager";
@@ -78,6 +79,7 @@ import {
   hasAutomationEmailDeliveryPath,
 } from "./services/mcp-email-delivery";
 import { McpService } from "./services/mcp-service";
+import { cleanupInterruptedMeetImports } from "./services/meet-recording-import";
 import { OrgMemoryService } from "./services/org-memory-service";
 import { OrgService } from "./services/org-service";
 import {
@@ -140,6 +142,8 @@ const MAX_AUTOMATION_RUN_RESUMES = 2;
 
 await seedDatabase(database.adapter, { grantBash: isTenantBashEnabled() });
 
+await cleanupInterruptedMeetImports();
+
 await claimLegacyCustomTools(database.adapter);
 
 await retireAppUserData(
@@ -180,10 +184,14 @@ const agent = new AgentService(
   llmUsageTracker
 );
 
+const composioService = new ComposioService(database.adapter, authService);
+
 const googleMeetService = new GoogleMeetService(
   database.adapter,
   getUserConfigDir(),
-  (request, signal) => agent.transcribeAudio(request, signal)
+  (request, signal) => agent.transcribeAudio(request, signal),
+  () => openaiProviderKey(agent.getUserConfig()),
+  composioService
 );
 
 agent.setServerTools({
@@ -229,8 +237,6 @@ if (sweptAttachments > 0) {
 const mcpClientManager = new McpClientManager();
 
 const mcpService = new McpService(database.adapter, mcpClientManager);
-
-const composioService = new ComposioService(database.adapter, authService);
 
 const skillsService = new SkillsService(database.adapter);
 

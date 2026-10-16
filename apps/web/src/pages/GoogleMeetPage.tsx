@@ -3,6 +3,7 @@ import {
   type MeetAction,
   type MeetActionInput,
   type MeetActionResults,
+  type MeetImportProgress,
   type Meeting,
   type MeetOverview as Overview,
   type TranscriptSegment,
@@ -17,9 +18,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Input,
   Switch,
 } from "@nakama/ui";
+import { buttonVariants } from "@nakama/ui/button-variants";
 import {
   AlertCircleIcon,
   ArrowRight01Icon,
@@ -30,16 +31,23 @@ import {
   Search01Icon,
   Settings01Icon,
   StopIcon,
+  Tick02Icon,
   Upload01Icon,
+  Video01Icon,
 } from "hugeicons-react";
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/use-auth";
+import { isAllowedComposioRedirectUrl } from "@/hooks/use-composio";
 import { client, formatError } from "@/lib/client";
 
 type MeetCall = <Action extends MeetAction>(
   action: Action,
-  input?: MeetActionInput
+  input?: MeetActionInput,
+  signal?: AbortSignal
 ) => Promise<MeetActionResults[Action]>;
+
+type Recording = MeetActionResults["recordings"]["recordings"][number];
 
 function meetingStatus(meeting: Meeting) {
   if (
@@ -178,7 +186,6 @@ function Settings({
   call: MeetCall;
 }) {
   const [enabled, setEnabled] = React.useState(initialEnabled);
-  const [apiKey, setApiKey] = React.useState("");
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
@@ -188,11 +195,7 @@ function Settings({
     setError("");
 
     try {
-      await call("configure", {
-        apiKey: apiKey.trim() || undefined,
-        enabled,
-      });
-      setApiKey("");
+      await call("configure", { enabled });
       close();
     } catch (reason) {
       setError(formatError(reason));
@@ -229,39 +232,13 @@ function Settings({
               onCheckedChange={setEnabled}
             />
           </label>
-          <div className="meet-row" style={{ justifyContent: "space-between" }}>
-            <label htmlFor="meet-api-key">OpenAI API key</label>
-            <a
-              href="https://platform.openai.com/api-keys"
-              rel="noreferrer"
-              style={{
-                fontSize: 14,
-                textDecoration: "underline",
-                textUnderlineOffset: 3,
-              }}
-              target="_blank"
-            >
-              Get an API key ↗
-            </a>
-          </div>
-          <Input
-            aria-describedby="meet-api-key-note"
-            autoComplete="off"
-            disabled={busy}
-            id="meet-api-key"
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder={
-              configured
-                ? "Paste a new key to replace it"
-                : "Paste your key here"
-            }
-            type="password"
-            value={apiKey}
-          />
-          {configured && <p className="meet-status">A key is already saved.</p>}
-          <p className="meet-status" id="meet-api-key-note">
-            OpenAI charges for transcription separately from ChatGPT.
-          </p>
+          {!configured && (
+            <p className="meet-status">
+              Add an OpenAI provider in{" "}
+              <a href="/customize/providers">AI Providers</a> to transcribe
+              meetings.
+            </p>
+          )}
           {error && <p role="alert">{error}</p>}
           <DialogFooter>
             <Button
@@ -273,11 +250,7 @@ function Settings({
               Cancel
             </Button>
             <Button disabled={busy} type="submit">
-              {busy
-                ? "Saving…"
-                : enabled
-                  ? "Enable transcription"
-                  : "Save changes"}
+              {busy ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>
         </form>
@@ -619,19 +592,178 @@ function ConnectionStatus({
     );
   }
 
-  let message =
-    "Open the Chrome extension on this page and choose Connect this Nakama tab.";
+  let message = "Extension not connected";
+  let tone = "muted";
 
   if (!overview.configured) {
-    message = "Set a transcription API key in Settings.";
+    message = "Needs an OpenAI provider";
+    tone = "warning";
   } else if (!overview.enabled) {
-    message = "Google Meet is disabled.";
+    message = "Disabled";
   }
 
   return (
-    <span className="meet-connection" data-tone="muted" role="status">
+    <span className="meet-connection" data-tone={tone} role="status">
       {message}
     </span>
+  );
+}
+
+// Drive names Meet recordings "<event title> (<date> <zone>) - Recording".
+// Instant meetings have no event, so Google uses the meeting code instead.
+function recordingLabel(recording: {
+  date?: string;
+  name: string;
+  size: number;
+}) {
+  const match =
+    /^(.*?)\s*\((\d{4}-\d{2}-\d{2})[ T]?(\d{2}:\d{2})?[^)]*\)(?:\s*[-–]\s*Recording)?(?:\.\w+)?$/i.exec(
+      recording.name
+    );
+
+  const base = match?.[1]?.trim() || recording.name;
+  const code = /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(base);
+
+  const timestamp = Date.parse(
+    recording.date || (match ? `${match[2]}T${match[3] ?? "00:00"}` : "")
+  );
+
+  const date = Number.isNaN(timestamp) ? null : new Date(timestamp);
+
+  return {
+    day: date ? String(date.getDate()) : "",
+    details: [
+      date?.toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+      code ? base : null,
+      `${Math.ceil(recording.size / 1024 / 1024)} MB`,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    month: date
+      ? date.toLocaleDateString(undefined, { month: "short" }).toUpperCase()
+      : "",
+    title: code ? "Instant meeting" : base,
+  };
+}
+
+function RecordingTile({
+  recording,
+}: {
+  recording: MeetActionResults["recordings"]["recordings"][number];
+}) {
+  const label = recordingLabel(recording);
+
+  return (
+    <>
+      <span aria-hidden="true" className="meet-date-tile">
+        {label.month ? (
+          <>
+            <span>{label.month}</span>
+            <strong>{label.day}</strong>
+          </>
+        ) : (
+          <Video01Icon size={18} />
+        )}
+      </span>
+      <span className="meet-meta">
+        <strong>{label.title}</strong>
+        <span className="meet-status">{label.details}</span>
+      </span>
+    </>
+  );
+}
+
+const IMPORT_STEPS = [
+  { label: "Download from Drive", step: "download" },
+  { label: "Extract audio", step: "extract" },
+  { label: "Transcribe with Whisper", step: "transcribe" },
+  { label: "Save to meeting history", step: "save" },
+] as const;
+
+// A measured fraction when the server reports one, otherwise null for a
+// sliding bar, so a long phase never looks frozen.
+function stepProgress(progress: MeetImportProgress | null) {
+  const megabytes = (bytes: number) => Math.round(bytes / 1024 / 1024);
+
+  if (progress?.step === "download" && progress.totalBytes && progress.bytes) {
+    return {
+      detail: `${megabytes(progress.bytes)} of ${megabytes(progress.totalBytes)} MB`,
+      fraction: Math.min(progress.bytes / progress.totalBytes, 1),
+    };
+  }
+
+  if (progress?.step === "transcribe" && progress.parts && progress.part) {
+    return {
+      detail:
+        progress.parts > 1 ? `Part ${progress.part} of ${progress.parts}` : "",
+      fraction:
+        progress.parts > 1 ? (progress.part - 1) / progress.parts : null,
+    };
+  }
+
+  return {
+    detail:
+      progress && progress.step !== "download" ? "" : "Preparing in Drive",
+    fraction: null,
+  };
+}
+
+function ImportSteps({ progress }: { progress: MeetImportProgress | null }) {
+  const current = IMPORT_STEPS.findIndex(
+    ({ step }) => step === (progress?.step ?? "download")
+  );
+
+  const active = stepProgress(progress);
+
+  return (
+    <ol aria-label="Import steps" className="meet-import-steps">
+      {IMPORT_STEPS.map(({ label, step }, index) => {
+        const state =
+          index < current ? "done" : index === current ? "active" : "pending";
+
+        return (
+          <li data-state={state} key={step}>
+            <span className="meet-import-step">
+              <span aria-hidden="true" className="meet-step-mark">
+                {state === "done" && <Tick02Icon size={14} />}
+              </span>
+              <span className={state === "active" ? "meet-shimmer" : undefined}>
+                {label}
+              </span>
+              {state === "active" && active.detail && (
+                <span className="meet-status">{active.detail}</span>
+              )}
+            </span>
+            {state === "active" && (
+              <span
+                aria-label={label}
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={
+                  active.fraction === null
+                    ? undefined
+                    : Math.round(active.fraction * 100)
+                }
+                className="meet-step-progress"
+                data-indeterminate={active.fraction === null || undefined}
+                role="progressbar"
+              >
+                <span
+                  style={
+                    active.fraction === null
+                      ? undefined
+                      : { width: `${Math.max(active.fraction * 100, 2)}%` }
+                  }
+                />
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -718,7 +850,6 @@ function useExtensionBridge(
 
       const input: MeetActionInput = {
         after: "after" in incoming ? Number(incoming.after) : undefined,
-        apiKey: "apiKey" in incoming ? String(incoming.apiKey) : undefined,
         content: "content" in incoming ? String(incoming.content) : undefined,
         enabled: "enabled" in incoming ? incoming.enabled === true : undefined,
         filename:
@@ -769,6 +900,359 @@ function useExtensionBridge(
   }, [call, signal, setConnected, setSelected]);
 }
 
+function RecordingSources({
+  result,
+  isPlatformAdmin,
+  connecting,
+  onConnect,
+}: {
+  result: MeetActionResults["recordings"] | null;
+  isPlatformAdmin: boolean;
+  connecting: string;
+  onConnect(slug: string): void;
+}) {
+  if (!result?.composioConfigured) {
+    return result ? (
+      <p>
+        {isPlatformAdmin ? (
+          <>
+            Set up Composio in{" "}
+            <a href="/integrations?section=composio">Integrations</a> to import
+            recordings.
+          </>
+        ) : (
+          "Ask your platform admin to set up Composio to import recordings."
+        )}
+      </p>
+    ) : null;
+  }
+
+  if (result.gmailConnected && result.driveConnected) {
+    return null;
+  }
+
+  const connections = [
+    {
+      connected: result.gmailConnected,
+      logo: "gmail",
+      name: "Gmail",
+      slug: "gmail",
+    },
+    {
+      connected: result.driveConnected,
+      logo: "google-drive",
+      name: "Google Drive",
+      slug: "googledrive",
+    },
+  ];
+
+  return (
+    <ul className="meet-connections">
+      {connections.map(({ connected, logo, name, slug }) => (
+        <li key={name}>
+          <span className="meet-tile-icon">
+            <img alt="" height={20} src={`/icons/${logo}.svg`} width={20} />
+          </span>
+          <span className="meet-meta">
+            <strong>{name}</strong>
+            <span
+              className="meet-connection"
+              data-tone={connected ? "success" : "muted"}
+            >
+              {connected ? "Connected" : "Not connected"}
+            </span>
+          </span>
+          {!connected && (
+            <Button
+              disabled={!!connecting}
+              onClick={() => onConnect(slug)}
+              size="sm"
+              type="button"
+            >
+              {connecting === slug ? "Connecting…" : "Connect"}
+            </Button>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function RecordingChoices({
+  importing,
+  picked,
+  progress,
+  ready,
+  recordings,
+  onSelect,
+}: {
+  importing: boolean;
+  picked: Recording | undefined;
+  progress: MeetImportProgress | null;
+  ready: boolean;
+  recordings: Recording[];
+  onSelect(key: string): void;
+}) {
+  if (importing && picked) {
+    return (
+      <div className="meet-import">
+        <div className="meet-import-recording">
+          <RecordingTile recording={picked} />
+        </div>
+        <ImportSteps progress={progress} />
+      </div>
+    );
+  }
+
+  if (!(ready && !importing)) {
+    return null;
+  }
+
+  if (recordings.length === 0) {
+    return <p>No Meet recording emails found.</p>;
+  }
+
+  return (
+    <fieldset className="meet-recordings">
+      <legend className="sr-only">Recording</legend>
+      {recordings.map((recording) => {
+        const key = `${recording.messageId}:${recording.fileId}`;
+
+        return (
+          <label key={key}>
+            <input
+              checked={recording === picked}
+              name="recording"
+              onChange={() => onSelect(key)}
+              type="radio"
+            />
+            <RecordingTile recording={recording} />
+            <span aria-hidden="true" className="meet-check">
+              <Tick02Icon size={14} />
+            </span>
+          </label>
+        );
+      })}
+    </fieldset>
+  );
+}
+
+function RecordingPicker({ close, call }: { close(): void; call: MeetCall }) {
+  const [result, setResult] = React.useState<
+    MeetActionResults["recordings"] | null
+  >(null);
+
+  const [error, setError] = React.useState("");
+  const [importing, setImporting] = React.useState(false);
+
+  const [progress, setProgress] = React.useState<MeetImportProgress | null>(
+    null
+  );
+
+  const importAbort = React.useRef<AbortController | null>(null);
+
+  const [selected, setSelected] = React.useState("");
+  const [connecting, setConnecting] = React.useState("");
+  const { user } = useAuth();
+  React.useEffect(() => {
+    let mounted = true;
+    call("recordings").then(
+      (value) => {
+        if (mounted) {
+          // SAFETY: The surrounding code checked this value before the assertion.
+          setResult(value as NonNullable<typeof result>);
+        }
+      },
+      (reason) => {
+        if (mounted) {
+          setError(formatError(reason));
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+    };
+  }, [call]);
+
+  React.useEffect(() => {
+    if (!importing) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      call("import-progress").then(
+        (value) => setProgress(value.progress),
+        () => undefined
+      );
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [call, importing]);
+
+  React.useEffect(() => () => importAbort.current?.abort(), []);
+
+  async function importRecording(recording: Recording) {
+    const abort = new AbortController();
+    importAbort.current = abort;
+    setImporting(true);
+    setProgress(null);
+    setError("");
+
+    try {
+      await call(
+        "import-recording",
+        { fileId: recording.fileId, messageId: recording.messageId },
+        abort.signal
+      );
+      close();
+    } catch (reason) {
+      if (!abort.signal.aborted) {
+        setError(formatError(reason));
+      }
+    } finally {
+      importAbort.current = null;
+      setImporting(false);
+    }
+  }
+
+  async function connect(toolkitSlug: string) {
+    setConnecting(toolkitSlug);
+    setError("");
+
+    try {
+      const { redirectUrl } =
+        await client.connectMeetRecordingSource(toolkitSlug);
+
+      if (!isAllowedComposioRedirectUrl(redirectUrl)) {
+        throw new Error("Blocked an unexpected Composio redirect URL.");
+      }
+
+      window.location.href = redirectUrl;
+    } catch (reason) {
+      setError(formatError(reason));
+      setConnecting("");
+    }
+  }
+
+  const recordings = result?.recordings ?? [];
+
+  const recordingKey = (recording: Recording) =>
+    `${recording.messageId}:${recording.fileId}`;
+
+  const picked =
+    recordings.find((recording) => recordingKey(recording) === selected) ??
+    recordings[0];
+
+  const ready = Boolean(result?.gmailConnected && result.driveConnected);
+  const loading = !(result || error);
+
+  return (
+    <Dialog
+      onOpenChange={(open) => {
+        if (!(open || importing)) {
+          close();
+        }
+      }}
+      open
+    >
+      <DialogContent className="sm:max-w-xl">
+        {loading && <span aria-hidden="true" className="meet-loading-bar" />}
+        <DialogHeader>
+          <DialogTitle>
+            {importing ? "Importing recording" : "Import recording"}
+          </DialogTitle>
+          {loading && (
+            <p className="meet-status meet-shimmer" role="status">
+              Finding recordings…
+            </p>
+          )}
+        </DialogHeader>
+        {error && <p role="alert">{error}</p>}
+        {loading && (
+          <div aria-hidden="true" className="meet-recordings-placeholder">
+            {["48%", "40%", "54%"].map((width) => (
+              <span key={width}>
+                <span className="meet-date-tile" />
+                <span>
+                  <span style={{ width }} />
+                  <span style={{ width: "30%" }} />
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
+        <RecordingSources
+          connecting={connecting}
+          isPlatformAdmin={user?.isPlatformAdmin === true}
+          onConnect={(slug) => void connect(slug)}
+          result={result}
+        />
+        <RecordingChoices
+          importing={importing}
+          onSelect={setSelected}
+          picked={picked}
+          progress={progress}
+          ready={ready}
+          recordings={recordings}
+        />
+        <DialogFooter className="meet-import-footer">
+          {importing && (
+            <p className="meet-status" role="status">
+              Keep this page open.
+            </p>
+          )}
+          <Button
+            onClick={() => (importing ? importAbort.current?.abort() : close())}
+            type="button"
+            variant="outline"
+          >
+            {importing ? "Cancel import" : "Cancel"}
+          </Button>
+          {ready && recordings.length > 0 && !importing && (
+            <Button
+              disabled={!picked}
+              onClick={() => picked && void importRecording(picked)}
+              type="button"
+            >
+              Import
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MeetingDeleteDialog({
+  call,
+  meeting,
+  onClose,
+  onDeleted,
+}: {
+  call: MeetCall;
+  meeting: Meeting | null;
+  onClose(): void;
+  onDeleted(id: string): void;
+}) {
+  if (!meeting) {
+    return null;
+  }
+
+  return (
+    <ConfirmDialog
+      confirmLabel="Delete meeting"
+      description={`This permanently deletes the meeting from ${new Date(meeting.createdAt).toLocaleString()} and its transcript. You can’t undo this.`}
+      onClose={onClose}
+      onConfirm={async () => {
+        await call("delete", { meetingId: meeting.id });
+        onDeleted(meeting.id);
+      }}
+      title="Delete meeting?"
+    />
+  );
+}
+
 function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const [overview, setOverview] = React.useState<Overview | null>(null);
   const [error, setError] = React.useState("");
@@ -778,6 +1262,25 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const [deleting, setDeleting] = React.useState<Meeting | null>(null);
   const [selected, setSelected] = React.useState<Meeting | null>(null);
   const [uploading, setUploading] = React.useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Composio OAuth returns here with ?import=recording to resume the import.
+  const [recordingPicker, setRecordingPicker] = React.useState(
+    () => searchParams.get("import") === "recording"
+  );
+
+  React.useEffect(() => {
+    if (searchParams.has("import")) {
+      setSearchParams(
+        (params) => {
+          params.delete("import");
+
+          return params;
+        },
+        { replace: true }
+      );
+    }
+  }, [searchParams, setSearchParams]);
   const uploadInput = React.useRef<HTMLInputElement>(null);
 
   async function upload(file: File) {
@@ -850,26 +1353,24 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
   const meetings = overview?.meetings ?? [];
   const live = meetings.filter(isActive);
 
-  const deleteDialog = deleting && (
-    <ConfirmDialog
-      confirmLabel="Delete meeting"
-      description={`This permanently deletes the meeting from ${new Date(deleting.createdAt).toLocaleString()} and its transcript. You can’t undo this.`}
+  const deleteDialog = (
+    <MeetingDeleteDialog
+      call={call}
+      meeting={deleting}
       onClose={() => setDeleting(null)}
-      onConfirm={async () => {
-        await call("delete", { meetingId: deleting.id });
+      onDeleted={(id) => {
         setSelected(null);
         setOverview((previous) =>
           previous
             ? {
                 ...previous,
                 meetings: previous.meetings.filter(
-                  (meeting) => meeting.id !== deleting.id
+                  (meeting) => meeting.id !== id
                 ),
               }
             : previous
         );
       }}
-      title="Delete meeting?"
     />
   );
 
@@ -926,6 +1427,13 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
             <Upload01Icon aria-hidden="true" size={16} />
             {uploading ? "Importing…" : "Upload file"}
           </Button>
+          <Button
+            disabled={!(overview?.enabled && overview.configured)}
+            onClick={() => setRecordingPicker(true)}
+          >
+            <Video01Icon aria-hidden="true" size={16} />
+            Import recording
+          </Button>
           {overview?.canConfigure && (
             <Button
               aria-label="Settings"
@@ -940,13 +1448,25 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
         </div>
       </header>
       {overview && !extensionConnected && (
-        <a
-          className="meet-extension-link"
-          download
-          href="/google-meet-extension.zip"
-        >
-          Download Chrome extension
-        </a>
+        <section aria-label="Live capture setup" className="meet-setup">
+          <span aria-hidden="true" className="meet-setup-icon">
+            <Mic01Icon size={18} />
+          </span>
+          <div className="meet-setup-copy">
+            <strong>Record live calls</strong>
+            <span>
+              Install the Chrome extension, then choose Connect this Nakama tab.
+            </span>
+          </div>
+          <a
+            className={buttonVariants({ variant: "outline" })}
+            download
+            href="/google-meet-extension.zip"
+          >
+            <Download01Icon aria-hidden="true" size={16} />
+            Download extension
+          </a>
+        </section>
       )}
       {error && <p role="alert">{error}</p>}
       {live.map((meeting) => (
@@ -966,6 +1486,9 @@ function MeetPage({ call, signal }: { call: MeetCall; signal: AbortSignal }) {
         <p>Loading…</p>
       )}
       {deleteDialog}
+      {recordingPicker && (
+        <RecordingPicker call={call} close={() => setRecordingPicker(false)} />
+      )}
       {(settings ?? (overview?.canConfigure && !overview.configured)) && (
         <Settings
           call={call}
@@ -999,7 +1522,8 @@ function OrganizationMeetPage({ orgId }: { orgId: string }) {
     setScope({
       call: async <Action extends MeetAction>(
         action: Action,
-        input?: MeetActionInput
+        input?: MeetActionInput,
+        signal?: AbortSignal
       ): Promise<MeetActionResults[Action]> => {
         abort.signal.throwIfAborted();
 
@@ -1007,7 +1531,7 @@ function OrganizationMeetPage({ orgId }: { orgId: string }) {
           action,
           input,
           orgId,
-          abort.signal
+          signal ? AbortSignal.any([abort.signal, signal]) : abort.signal
         );
 
         abort.signal.throwIfAborted();
