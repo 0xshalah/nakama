@@ -54,6 +54,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migratePasswordResetTokensTable);
   migrateLegacyProfileIds(db);
   atomic(migrateCodingDelegationSkillName);
+  atomic(migrateArtifactDesignSkillName);
   atomic(migrateWorkspaceSettingsTable);
   atomic(migrateLlmUsageOrgScope);
   atomic(migrateToolOutputSavingsTable);
@@ -73,6 +74,7 @@ export function migrateDatabase(db: Database): void {
   atomic(migrateRemoveGoogleMeetPlugin);
   atomic(migrateFilePinsTable);
   atomic(migrateNotificationWebhookDeliveriesTable);
+  atomic(migrateArtifactsTable);
   atomic((database) =>
     addNullableTextColumnIfMissing(database, "profiles", "acp_agent")
   );
@@ -1666,11 +1668,25 @@ function migrateLegacyProfileIds(db: Database): void {
 }
 
 export function migrateCodingDelegationSkillName(db: Database): void {
+  renameSkillRecords(db, "coding-delegation", "coding-agent");
+}
+
+export function migrateArtifactDesignSkillName(db: Database): void {
+  renameSkillRecords(db, "save-artifact", "artifact-design");
+}
+
+// Points profile_skills at the new name without duplicates, then drops the
+// old rows. With no new row yet, the old rows take the new name and path.
+function renameSkillRecords(
+  db: Database,
+  oldName: string,
+  newName: string
+): void {
   const legacyRows = db
     .prepare<{ id: string; source_path: string }, SQLQueryBindings[]>(
       "SELECT id, source_path FROM skills WHERE name = ?"
     )
-    .all("coding-delegation");
+    .all(oldName);
 
   if (legacyRows.length === 0) {
     return;
@@ -1680,7 +1696,7 @@ export function migrateCodingDelegationSkillName(db: Database): void {
     .prepare<{ id: string }, SQLQueryBindings[]>(
       "SELECT id FROM skills WHERE name = ?"
     )
-    .get("coding-agent");
+    .get(newName);
 
   if (canonical) {
     const reassignProfileSkill = db.prepare(`
@@ -1720,8 +1736,8 @@ export function migrateCodingDelegationSkillName(db: Database): void {
 
   for (const row of legacyRows) {
     update.run(
-      "coding-agent",
-      row.source_path.replaceAll("coding-delegation", "coding-agent"),
+      newName,
+      row.source_path.replaceAll(oldName, newName),
       now,
       row.id
     );
@@ -2469,6 +2485,23 @@ CREATE TABLE IF NOT EXISTS file_pins (
   path TEXT NOT NULL,
   PRIMARY KEY (org_id, user_id, profile_id, path)
 );
+  `);
+}
+
+function migrateArtifactsTable(db: Database): void {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS artifacts (
+  org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  channel TEXT,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (org_id, profile_id, filename)
+);
+
+CREATE INDEX IF NOT EXISTS artifacts_org_user ON artifacts (org_id, user_id);
   `);
 }
 
