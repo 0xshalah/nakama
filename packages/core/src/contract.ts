@@ -2915,6 +2915,7 @@ export type ProviderName =
   | "zhipu"
   | "zhipu_cn"
   | "xai"
+  | "groq"
   | "together"
   | "xiaomi"
   | "meta"
