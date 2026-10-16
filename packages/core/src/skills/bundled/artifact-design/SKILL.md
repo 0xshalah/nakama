@@ -5,7 +5,7 @@ include-body-on-match: true
 ---
 
 Design complete deliverables that the user can revisit in the profile **Artifacts** tab.
-These instructions are loaded directly when this skill is active. Read `dashboard-example.html` from this skill's directory only when you build a dashboard.
+These instructions are loaded directly when this skill is active.
 
 ## Choose the output
 
@@ -76,12 +76,12 @@ Separate sections by at least `--gap`. Give ruled rows at least `.75rem` vertica
 
 Use this layout when the user asks for a dashboard, KPI page, or performance report with metrics and a chart.
 
-1. Read `dashboard-example.html` from this skill's directory before you write the page. Copy its `<head>` and `<script>` exactly; they replace the shared token example and the **Ledger** recipe. In the script, change only the `series`, `yTicks`, and `xLabels` values; the drawing code sets all chart styles. In the body, change only the text, the stat cards, and the table rows. Replace every sample label and number with the user's data; sample content must never appear in the artifact.
-2. Order the page: title, a one-line subtitle with the channels, period, and comparison source exactly as the user named them (keep a named source, such as the CRM or sheet the targets come from), one row of 3–5 stat cards (two columns on phones; never leave one card alone on a row), the main chart, then the detail table. Put each block in a panel with a 1px border, `--radius`, and no background fill. Use no shadows.
-3. Stat card: a sentence-case label in `--muted`, a large value with tabular numbers, and one short delta line. Color the delta by meaning, not by sign: `--good` when the user's data shows it is better (a lower CPA is better), `--bad` when worse, `--muted` when unknown.
-4. Line chart: inline SVG with HTML labels, as in the example. Do not load a chart library. Draw 2px lines with no area fill and no point markers, except one dot on the last point of each series. Use 3–5 round y-axis ticks that cover the data (for example 200, 400, 600, 800) with light gridlines. Label the x-axis only at period starts, such as month names. Put the legend above the plot, at the left, with small square swatches.
+1. Start from the shared tokens and the **Ledger** recipe. Add these tokens, each with a light and a dark value: `--grid` (#f0f0f0 / #1c1c1f), `--series-1` (#171717 / #fafafa), `--series-2` (#d97706 / #f59e0b), `--good` (#15803d / #4ade80), `--bad` (#c2410c / #fb923c).
+2. Order the page: title, a one-line subtitle with the channels, period, and comparison source exactly as the user named them (keep a named source, such as the CRM or sheet the targets come from), one row of 3–5 stat cards (two columns on phones; never leave one card alone on a row), the main chart, then the detail table. Put each block in a panel with a 1px border, `--radius`, and no background fill, with 1rem between blocks. Panel headings are 1rem at weight 600. Use no shadows.
+3. Stat card: a sentence-case label in `--muted`, a large value at weight 700 with tabular numbers, and one short delta line. Color the delta by meaning, not by sign: `--good` when the user's data shows it is better (a lower CPA is better), `--bad` when worse, `--muted` when unknown.
+4. Line chart, with no chart library: a `position: relative` box about 16rem high, with room on the left for y labels and below for x labels. Inside it, put one SVG with `viewBox="0 0 100 100"`, `preserveAspectRatio="none"` and `position: absolute; inset: 0`. The SVG holds only gridlines and one `<polyline>` per series, each with `vector-effect="non-scaling-stroke"`. Never put `<text>` or `<circle>` in it: the stretch distorts them. Place tick labels, x labels, and dots as absolutely positioned HTML elements, at `left: i / (n − 1) × 100%` and `top: 100% − (v − min) / (max − min) × 100%`, labels in `--muted` at 13px. Draw 2px lines with no area fill and no point markers, except one dot on the last point of each series. Use 3–5 round y-axis ticks that cover the data (for example 200, 400, 600, 800) with 1px gridlines in `--grid`. Label the x-axis only at period starts, such as month names. Put the legend above the plot, at the left, with small square swatches.
 5. Series colors: `--series-1` (ink) for the first series and `--series-2` (amber) for the second. Add more series colors as tokens with light and dark values.
-6. Table: sentence-case headers in `--muted`, plain-text cells (no badges or pills), numeric columns right-aligned with `font-variant-numeric: tabular-nums`. Color only the change column, by meaning.
+6. Table: inside a `<div>` with `overflow-x: auto`, so it scrolls on phones instead of losing columns. Sentence-case headers in `--muted`, plain-text cells (no badges or pills), numeric columns right-aligned with `font-variant-numeric: tabular-nums`. Color only the change column, by meaning.
 7. Do not use uppercase labels, gradients, icons, or decorative badges. When the user supplies only approximate points (for example "from ~340 to ~650"), draw a smooth progression between them and do not print the in-between values. Before you save, check the series against every trend the user named: a crossing, peak, or dip must fall in the stated period. To put a crossing at index k, keep the first series higher at every index before k and the second series higher from k on.
 
 ## Slide decks
