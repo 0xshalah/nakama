@@ -61,6 +61,7 @@ function ChatDitherBackground() {
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
+
     if (!(canvas && ctx)) {
       return;
     }
@@ -111,13 +112,16 @@ function ChatDitherBackground() {
 
     let frame = 0;
     let last = 0;
+
     const tick = (time: number) => {
       if (time - last >= DITHER_FRAME_MS) {
         last = time;
         draw(time);
       }
+
       frame = requestAnimationFrame(tick);
     };
+
     frame = requestAnimationFrame(tick);
 
     return () => {
