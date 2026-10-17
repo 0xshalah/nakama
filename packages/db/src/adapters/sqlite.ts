@@ -1319,14 +1319,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     "SELECT * FROM sessions WHERE id = ? AND app_user_id IS NULL"
   );
 
+  // org_id follows the profile's org. The profile move path keeps it in sync.
   const upsertSessionStmt = db.prepare(`
-    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, pinned)
-    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
+    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned)
+    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       profile_id = excluded.profile_id,
       channel = excluded.channel,
       user_id = COALESCE(excluded.user_id, sessions.user_id),
-      model = excluded.model
+      model = excluded.model,
+      org_id = excluded.org_id
     WHERE sessions.app_user_id IS NULL
   `);
 
@@ -6293,6 +6295,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
     async upsertSession(record) {
       requireWritableSession(record.id);
+
+      // The owning org is the profile's org at insert time; callers do not
+      // pass one, so it cannot drift from the profile the session points to.
+      const orgId = getProfileStmt.get(record.profileId)?.org_id ?? null;
+
       upsertSessionStmt.run(
         record.id,
         record.profileId,
@@ -6301,6 +6308,7 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.createdAt,
         record.userId ?? null,
         record.model,
+        orgId,
         record.pinned ? 1 : 0
       );
     },
