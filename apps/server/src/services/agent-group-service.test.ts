@@ -1,12 +1,16 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import type { ProfileSummary } from "@nakama/core";
 import { setupTestConfigDir } from "../test-config-dir";
 import type { SubAgentRunInput } from "../tools/sub-agent-shared";
 import { AgentGroupService } from "./agent-group-service";
+import { closeAgentGroupDatabases } from "./agent-group-store";
 
 const ORG_ID = "org_test";
 
 const USER_ID = "u1";
+
+// Before the config dir cleanup, which Windows refuses while a file is open.
+afterEach(closeAgentGroupDatabases);
 
 setupTestConfigDir("nakama-agent-group-service-");
 

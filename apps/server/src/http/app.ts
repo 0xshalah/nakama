@@ -8,6 +8,7 @@ import {
 import { isHtmlArtifactMimeType } from "@nakama/core/artifact-mime";
 import { bodyLimit } from "hono/body-limit";
 import { requestId } from "hono/request-id";
+import { closeAgentGroupDatabases } from "../services/agent-group-store";
 import { sessionTurnRegistry } from "../services/session-turn-registry";
 import { tryServeStaticWeb } from "../static-web";
 import { createAuditLogMiddleware } from "./audit-log";
@@ -115,10 +116,13 @@ export function createHonoApp(options: ServerOptions) {
         await Bun.sleep(25);
       }
 
+      closeAgentGroupDatabases();
       await beforeRestore?.();
     },
     onDataRestored: afterRestore
       ? async () => {
+          // Drops a handle a group reply reopened mid-restore.
+          closeAgentGroupDatabases();
           await afterRestore();
           restoringData = false;
         }

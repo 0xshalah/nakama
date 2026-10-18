@@ -63,24 +63,44 @@ interface MessageRow {
 /** A stored session; `active` belongs to the in-memory run state. */
 export type StoredGroupSession = Omit<AgentGroupSession, "active">;
 
-/**
- * One SQLite file per org, opened per call so no handle stays open across a
- * data restore or export.
- */
+// One open handle per org file, so polling does not reopen it and the schema
+// runs once. Keyed by path, which follows the config dir.
+const databases = new Map<string, Database>();
+
 function withGroupDb<T>(orgId: string, run: (db: Database) => T): T {
   const directory = getOrgConfigDir(orgId);
-  mkdirSync(directory, { mode: 0o700, recursive: true });
   const path = join(directory, "agent-groups.sqlite");
-  const db = new Database(path);
+  let db = databases.get(path);
 
-  try {
-    chmodSync(path, 0o600);
-    db.exec(SCHEMA);
+  if (!db) {
+    mkdirSync(directory, { mode: 0o700, recursive: true });
+    db = new Database(path);
 
-    return run(db);
-  } finally {
+    try {
+      chmodSync(path, 0o600);
+      db.exec(SCHEMA);
+    } catch (error) {
+      db.close();
+      throw error;
+    }
+
+    databases.set(path, db);
+  }
+
+  return run(db);
+}
+
+/**
+ * Closes every group database, for a data restore: Windows cannot move an
+ * open file, and a handle kept across the swap would still point at the old
+ * one. The next call reopens what is on disk.
+ */
+export function closeAgentGroupDatabases(): void {
+  for (const db of databases.values()) {
     db.close();
   }
+
+  databases.clear();
 }
 
 function toGroup(row: GroupRow): AgentGroup {

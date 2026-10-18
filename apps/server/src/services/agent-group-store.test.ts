@@ -1,7 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
+import { getOrgConfigDir } from "@nakama/core";
 import { setupTestConfigDir } from "../test-config-dir";
 import {
   appendAgentGroupMessage,
+  closeAgentGroupDatabases,
   createAgentGroup,
   createGroupSession,
   deleteAgentGroup,
@@ -19,6 +23,9 @@ import {
 } from "./agent-group-store";
 
 const ORG_ID = "org_test";
+
+// Before the config dir cleanup, which Windows refuses while a file is open.
+afterEach(closeAgentGroupDatabases);
 
 setupTestConfigDir("nakama-agent-group-store-");
 
@@ -122,5 +129,17 @@ describe("agent group store", () => {
 
     expect(deleteAgentGroupAvatar(ORG_ID, "u1", group.id)).toBe(true);
     expect(getAgentGroup(ORG_ID, "u1", group.id)?.avatarVersion).toBeNull();
+  });
+
+  test("reads the file on disk again once its handle is closed", () => {
+    createAgentGroup(ORG_ID, "u1", "Launch", ["p1", "p2"]);
+    const path = join(getOrgConfigDir(ORG_ID), "agent-groups.sqlite");
+
+    // The open handle keeps the replaced file, as after a data restore.
+    rmSync(path);
+    expect(listAgentGroups(ORG_ID, "u1")).not.toEqual([]);
+
+    closeAgentGroupDatabases();
+    expect(listAgentGroups(ORG_ID, "u1")).toEqual([]);
   });
 });
