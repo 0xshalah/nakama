@@ -5,6 +5,7 @@ import { ArrowLeft01Icon, ArrowRight01Icon } from "hugeicons-react";
 import type { ElementType } from "react";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { GroupRecents } from "@/components/agent-groups/group-recents";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
 import {
   PinnedChats,
@@ -37,8 +38,11 @@ import {
 } from "@/lib/chat-history";
 import {
   enabledPluginNavEntries,
+  groupPath,
+  groupRouteFromPath,
   type NavItem,
   navHrefForPage,
+  PAGE_PATHS,
   pageIdFromPath,
   pluginIcon,
   pluginIdFromPath,
@@ -60,6 +64,8 @@ export function AppSidebar({
 }) {
   const location = useLocation();
   const page = pageIdFromPath(location.pathname) ?? "chat";
+  // Inside a group, "New chat" and Recents belong to that group.
+  const groupRoute = groupRouteFromPath(location.pathname);
   const { user, activeOrg } = useAuth();
   const prefetchAppData = usePrefetchAppData();
   const { data: automationUnreadTotal = 0 } = useAutomationUnreadTotal();
@@ -110,9 +116,14 @@ export function AppSidebar({
                 item.id === "customize"
                   ? !onPinnedPlugin &&
                     (page === "customize" || !SIDEBAR_PAGE_IDS.includes(page))
-                  : item.id === page &&
-                    (page !== "chat" ||
-                      !chatProfileIdFromPath(location.pathname))
+                  : item.id === "chat"
+                    ? groupRoute
+                      ? !groupRoute.sessionId
+                      : page === "chat" &&
+                        !chatProfileIdFromPath(location.pathname)
+                    : item.id === "groups"
+                      ? location.pathname === PAGE_PATHS.groups
+                      : item.id === page
               }
               badge={
                 item.id === "automations" ? automationUnreadTotal : undefined
@@ -124,10 +135,14 @@ export function AppSidebar({
               onPrefetch={
                 item.id === "automations" ? prefetchAppData : undefined
               }
-              to={navHrefForPage(
-                item.id,
-                chatProfileIdFromPath(location.pathname)
-              )}
+              to={
+                item.id === "chat" && groupRoute
+                  ? groupPath(groupRoute.groupId)
+                  : navHrefForPage(
+                      item.id,
+                      chatProfileIdFromPath(location.pathname)
+                    )
+              }
             />
           ))}
           {pinnedPlugins.map((entry) => (
@@ -146,7 +161,11 @@ export function AppSidebar({
             />
           ))}
         </div>
-        {collapsed ? null : <RecentChats />}
+        {collapsed ? null : groupRoute ? (
+          <GroupRecents groupId={groupRoute.groupId} key={groupRoute.groupId} />
+        ) : (
+          <RecentChats />
+        )}
       </nav>
     </aside>
   );
