@@ -196,6 +196,36 @@ describe("AgentGroupService", () => {
     ).toBeNull();
   });
 
+  test("a message after Stop only wakes the agents it mentions", async () => {
+    const started = Promise.withResolvers<void>();
+    const held = Promise.withResolvers<void>();
+
+    const { calls, service } = setup(async () => {
+      started.resolve();
+      await held.promise;
+
+      return "noted";
+    });
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+
+    const { run, session } = service.start(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      "@alpha @beta go"
+    );
+
+    await started.promise;
+    service.stop(ORG_ID, USER_ID, group.id, session.id);
+    await service.post(ORG_ID, USER_ID, group.id, session.id, "@alpha again");
+    held.resolve();
+    await run;
+
+    // Beta was queued before Stop, so it must not reply.
+    expect(calls).toEqual(["a", "a"]);
+  });
+
   test("a message sent while agents reply joins the running turn", async () => {
     const started = Promise.withResolvers<void>();
     const held = Promise.withResolvers<void>();

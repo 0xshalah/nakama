@@ -105,7 +105,7 @@ export class AgentGroupService {
 
     for (const run of this.runs.values()) {
       if (run.groupId === groupId) {
-        run.stopping = true;
+        halt(run);
       }
     }
   }
@@ -441,9 +441,19 @@ export class AgentGroupService {
     const run = this.runs.get(sessionId);
 
     if (run) {
-      run.stopping = true;
+      halt(run);
     }
   }
+}
+
+/**
+ * Drops the queued speakers with the flag, so a message sent after Stop
+ * wakes only the agents it mentions.
+ */
+function halt(run: ActiveRun): void {
+  run.stopping = true;
+  run.queue.length = 0;
+  run.inbox.length = 0;
 }
 
 function enqueue(queue: string[], ids: string[]): void {
