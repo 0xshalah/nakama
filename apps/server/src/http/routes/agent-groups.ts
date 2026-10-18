@@ -1,4 +1,4 @@
-import { z } from "@hono/zod-openapi";
+import { createRoute, z } from "@hono/zod-openapi";
 import type {
   AgentGroup,
   AgentGroupSession,
@@ -35,6 +35,81 @@ const sessionChangesSchema = z
     message: "Nothing to change",
   });
 
+const SESSION_PATH = "/v1/agent-groups/{groupId}/sessions/{sessionId}";
+
+// [method, path, summary, status, body]: documents the plain routes below in
+// /openapi.json.
+const DOCUMENTED_ROUTES: [
+  "delete" | "get" | "patch" | "post" | "put",
+  string,
+  string,
+  number,
+  z.ZodType?,
+][] = [
+  ["get", "/v1/agent-groups", "List your agent groups", 200],
+  ["post", "/v1/agent-groups", "Create an agent group", 201, groupSchema],
+  ["get", "/v1/agent-groups/{groupId}", "Get an agent group", 200],
+  ["put", "/v1/agent-groups/{groupId}", "Edit a group", 200, groupSchema],
+  ["delete", "/v1/agent-groups/{groupId}", "Delete a group and its chats", 204],
+  ["get", "/v1/agent-groups/{groupId}/avatar", "Get a group's photo", 200],
+  [
+    "put",
+    "/v1/agent-groups/{groupId}/avatar",
+    "Replace a group's photo",
+    204,
+    imageSchema,
+  ],
+  [
+    "delete",
+    "/v1/agent-groups/{groupId}/avatar",
+    "Remove a group's photo",
+    204,
+  ],
+  ["get", "/v1/agent-groups/{groupId}/sessions", "List a group's chats", 200],
+  [
+    "post",
+    "/v1/agent-groups/{groupId}/sessions",
+    "Start a chat with its first message",
+    201,
+    messageSchema,
+  ],
+  ["get", SESSION_PATH, "Get a chat, its messages and its run", 200],
+  ["patch", SESSION_PATH, "Rename or pin a chat", 204, sessionChangesSchema],
+  ["delete", SESSION_PATH, "Delete a chat", 204],
+  [
+    "post",
+    `${SESSION_PATH}/messages`,
+    "Send a message; mentioned agents reply in the background",
+    204,
+    messageSchema,
+  ],
+  ["post", `${SESSION_PATH}/stop`, "Stop after the current reply", 204],
+];
+
+function documentRoutes(app: HonoApp): void {
+  for (const [method, path, summary, status, body] of DOCUMENTED_ROUTES) {
+    const names = [...path.matchAll(/\{(\w+)\}/g)].map((match) => match[1]);
+
+    app.openAPIRegistry.registerPath(
+      createRoute({
+        method,
+        path,
+        request: {
+          ...(body && {
+            body: { content: { "application/json": { schema: body } } },
+          }),
+          params: z.object(
+            Object.fromEntries(names.map((name) => [name, z.string()]))
+          ),
+        },
+        responses: { [status]: { description: summary } },
+        summary,
+        tags: ["Agent groups"],
+      })
+    );
+  }
+}
+
 function logRunFailure(groupId: string) {
   return (error: Error) => {
     console.error("[agent-groups] reply run failed", { error, groupId });
@@ -51,6 +126,7 @@ export function registerAgentGroupRoutes(
 
   // Built once so the in-memory run state lives as long as the process.
   const service = new AgentGroupService(options.databaseAdapter, options.agent);
+  documentRoutes(app);
 
   app.get("/v1/agent-groups", (c) => {
     const auth = requireOrgMemberFromContext(c);
