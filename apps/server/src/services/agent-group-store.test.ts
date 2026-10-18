@@ -17,7 +17,9 @@ import {
   listAgentGroupMessages,
   listAgentGroups,
   listGroupSessions,
+  listRailPins,
   setAgentGroupAvatar,
+  setRailPin,
   updateAgentGroup,
   updateGroupSession,
 } from "./agent-group-store";
@@ -129,6 +131,22 @@ describe("agent group store", () => {
 
     expect(deleteAgentGroupAvatar(ORG_ID, "u1", group.id)).toBe(true);
     expect(getAgentGroup(ORG_ID, "u1", group.id)?.avatarVersion).toBeNull();
+  });
+
+  test("keeps rail pins per user, latest first, and drops a deleted group's pin", () => {
+    const group = createAgentGroup(ORG_ID, "u1", "Launch", ["p1", "p2"]);
+
+    setRailPin(ORG_ID, "u1", "agent-a", true);
+    setRailPin(ORG_ID, "u1", group.id, true);
+    setRailPin(ORG_ID, "u2", "agent-b", true);
+
+    expect(listRailPins(ORG_ID, "u1")).toEqual([group.id, "agent-a"]);
+
+    setRailPin(ORG_ID, "u1", "agent-a", false);
+    deleteAgentGroup(ORG_ID, "u1", group.id);
+
+    expect(listRailPins(ORG_ID, "u1")).toEqual([]);
+    expect(listRailPins(ORG_ID, "u2")).toEqual(["agent-b"]);
   });
 
   test("reads the file on disk again once its handle is closed", () => {

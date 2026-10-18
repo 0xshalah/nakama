@@ -58,6 +58,11 @@ export function groupSessionTitle(content: string): string {
   return line.length > 80 ? `${line.slice(0, 79)}…` : line || "New chat";
 }
 
+/** Agent and group ids the user pinned to the top of the rail, latest first. */
+export interface ListRailPinsResponse {
+  itemIds: string[];
+}
+
 export interface MentionRange {
   end: number;
   handle: string;
