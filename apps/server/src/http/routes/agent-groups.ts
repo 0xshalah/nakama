@@ -1,12 +1,15 @@
 import { createRoute, z } from "@hono/zod-openapi";
+import { NakamaApiError } from "@nakama/core";
 import type {
   AgentGroup,
   AgentGroupSession,
   AgentGroupSessionDetail,
   ListAgentGroupSessionsResponse,
   ListAgentGroupsResponse,
+  ListRailPinsResponse,
 } from "@nakama/core/agent-groups";
 import { AgentGroupService } from "../../services/agent-group-service";
+import { listRailPins, setRailPin } from "../../services/agent-group-store";
 import type { ServerOptions } from "../context";
 import {
   requireActiveOrgIdFromContext,
@@ -84,6 +87,14 @@ const DOCUMENTED_ROUTES: [
     messageSchema,
   ],
   ["post", `${SESSION_PATH}/stop`, "Stop after the current reply", 204],
+  [
+    "get",
+    "/v1/rail-pins",
+    "List the agents and groups pinned in the rail",
+    200,
+  ],
+  ["put", "/v1/rail-pins/{itemId}", "Pin an agent or group to the top", 204],
+  ["delete", "/v1/rail-pins/{itemId}", "Unpin an agent or group", 204],
 ];
 
 function documentRoutes(app: HonoApp): void {
@@ -318,4 +329,33 @@ export function registerAgentGroupRoutes(
 
     return c.body(null, 204);
   });
+
+  // Rail pins cover agents and groups alike; an unknown id only reorders nothing.
+  app.get("/v1/rail-pins", (c) => {
+    const auth = requireOrgMemberFromContext(c);
+
+    return json<ListRailPinsResponse>({
+      itemIds: listRailPins(requireActiveOrgIdFromContext(c), auth.user.id),
+    });
+  });
+
+  for (const method of ["put", "delete"] as const) {
+    app[method]("/v1/rail-pins/:itemId", (c) => {
+      const auth = requireOrgMemberFromContext(c);
+      const itemId = c.req.param("itemId");
+
+      if (itemId.length > 200) {
+        throw new NakamaApiError("Invalid item id", 400);
+      }
+
+      setRailPin(
+        requireActiveOrgIdFromContext(c),
+        auth.user.id,
+        itemId,
+        method === "put"
+      );
+
+      return c.body(null, 204);
+    });
+  }
 }

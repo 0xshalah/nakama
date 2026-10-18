@@ -24,5 +24,6 @@ describe("agent group routes", () => {
     expect(
       spec.paths?.["/v1/agent-groups/{groupId}/sessions/{sessionId}/stop"]?.post
     ).toBeDefined();
+    expect(spec.paths?.["/v1/rail-pins/{itemId}"]?.put).toBeDefined();
   });
 });
