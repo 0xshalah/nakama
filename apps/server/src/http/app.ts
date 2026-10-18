@@ -17,6 +17,7 @@ import { serializeHttpOpenApiSpec } from "./openapi";
 import { createOrgContextMiddleware } from "./org-middleware";
 import { createRateLimitMiddleware } from "./rate-limit-middleware";
 import { registerAcpMcpRoutes } from "./routes/acp-mcp";
+import { registerAgentGroupRoutes } from "./routes/agent-groups";
 import { registerArtifactShareRoutes } from "./routes/artifact-shares";
 import { registerAuditEventRoutes } from "./routes/audit-events";
 import { registerAuthRoutes } from "./routes/auth";
@@ -403,6 +404,7 @@ export function createHonoApp(options: ServerOptions) {
   registerToolRoutes(app, options);
   registerPluginRoutes(app, options);
   registerGoogleMeetRoutes(app, options);
+  registerAgentGroupRoutes(app, options);
   registerAutomationRoutes(app, options);
   registerNotificationDestinationRoutes(app, options);
   registerAutomationWorkerSettingsRoutes(app, options);
