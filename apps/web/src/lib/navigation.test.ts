@@ -5,6 +5,8 @@ import {
   canAccessSystemPage,
   canManagePluginReleases,
   enabledPluginNavEntries,
+  groupPath,
+  groupRouteFromPath,
   orgSkillProposalsPath,
   pageIdFromPath,
   pluginIdFromPath,
@@ -37,6 +39,7 @@ describe("visibleNavGroups", () => {
       "customize",
       "files",
       "google-meet",
+      "groups",
       "mcp",
       "organization",
       "plugin-management",
@@ -189,4 +192,19 @@ test("the removed History page has no navigation destination", () => {
 
 test("Usage lives under Customize", () => {
   expect(pageIdFromPath("/customize/usage")).toBe("usage");
+});
+
+test("a group path names the group and, inside a chat, the session", () => {
+  expect(groupRouteFromPath(groupPath("g 1"))).toEqual({
+    groupId: "g 1",
+    sessionId: null,
+  });
+  expect(groupRouteFromPath(groupPath("g1", "s1"))).toEqual({
+    groupId: "g1",
+    sessionId: "s1",
+  });
+  expect(groupRouteFromPath("/groups")).toBeNull();
+  expect(groupRouteFromPath("/groups/")).toBeNull();
+  expect(groupRouteFromPath("/chat/g1/s1")).toBeNull();
+  expect(pageIdFromPath(groupPath("g1", "s1"))).toBe("groups");
 });

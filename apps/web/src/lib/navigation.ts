@@ -14,6 +14,7 @@ import {
   Settings01Icon,
   SharedWifiIcon,
   SlidersHorizontalIcon,
+  UserGroupIcon,
   UserSquareIcon,
   WorkflowSquare01Icon,
 } from "hugeicons-react";
@@ -22,6 +23,7 @@ type NavIcon = typeof SharedWifiIcon;
 
 export type PageId =
   | "google-meet"
+  | "groups"
   | "chat"
   | "composio"
   | "customize"
@@ -83,6 +85,12 @@ const NAV_GROUPS: NavGroup[] = [
         "Agent",
         "Manage bot configs and tool allowlists",
         UserSquareIcon
+      ),
+      navItem(
+        "groups",
+        "Groups",
+        "Group chats where agents talk to each other",
+        UserGroupIcon
       ),
       navItem(
         "google-meet",
@@ -167,6 +175,7 @@ const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "chat",
   "profiles",
+  "groups",
   "plugin-management",
   "composio",
   "automations",
@@ -230,7 +239,7 @@ export function visibleNavGroups(access: {
 
   for (const group of NAV_GROUPS) {
     const items = group.items.filter((item) => {
-      if (item.id === "google-meet") {
+      if (item.id === "google-meet" || item.id === "groups") {
         return canAccessIntegrationsPage(access.orgRole);
       }
 
@@ -429,6 +438,35 @@ export function teamDetailPath(teamId: string): string {
   return `${PAGE_PATHS.organization}/teams/${encodeURIComponent(teamId)}`;
 }
 
+/** A group's new chat, or one of its sessions. */
+export function groupPath(groupId: string, sessionId?: string): string {
+  const base = `${PAGE_PATHS.groups}/${encodeURIComponent(groupId)}`;
+
+  return sessionId ? `${base}/${encodeURIComponent(sessionId)}` : base;
+}
+
+/** The group (and session) a `/groups/...` path points at, if any. */
+export function groupRouteFromPath(
+  pathname: string
+): { groupId: string; sessionId: string | null } | null {
+  const [groupId, sessionId] = pathname
+    .slice(`${PAGE_PATHS.groups}/`.length)
+    .split("/");
+
+  if (!(pathname.startsWith(`${PAGE_PATHS.groups}/`) && groupId)) {
+    return null;
+  }
+
+  try {
+    return {
+      groupId: decodeURIComponent(groupId),
+      sessionId: sessionId ? decodeURIComponent(sessionId) : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export const PAGE_PATHS: Record<PageId, string> = {
   automations: "/automations",
   chat: "/chat",
@@ -436,6 +474,7 @@ export const PAGE_PATHS: Record<PageId, string> = {
   customize: "/customize",
   files: "/files",
   "google-meet": "/google-meet",
+  groups: "/groups",
   mcp: "/customize/mcp",
   notifications: "/notifications",
   organization: "/organization",
@@ -456,6 +495,7 @@ const PREFIX_PAGE_IDS: readonly [string, PageId][] = [
   ["/customize/connections", "customize"],
   [PAGE_PATHS["plugin-management"], "plugin-management"],
   [PAGE_PATHS.chat, "chat"],
+  [PAGE_PATHS.groups, "groups"],
   [PAGE_PATHS.organization, "organization"],
   [PAGE_PATHS.soul, "soul"],
   [PAGE_PATHS.profiles, "profiles"],
