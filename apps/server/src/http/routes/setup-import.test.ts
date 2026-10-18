@@ -3,6 +3,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getUserConfigDir } from "@nakama/core";
 import { unzipSync, zipSync } from "fflate";
+import {
+  createAgentGroup,
+  listAgentGroups,
+} from "../../services/agent-group-store";
 import * as dataPortability from "../../services/data-portability";
 import {
   createNakamaDataExport,
@@ -219,6 +223,32 @@ describe("setup import routes", () => {
       requiresRestart: false,
       restoredFileCount: 1,
     });
+  });
+
+  test("restore reopens agent group files from the restored data", async () => {
+    const { app } = createMinimalHonoApp({ onDataRestored: async () => {} });
+    await writeFile(join(getUserConfigDir(), "config.ini"), "original");
+
+    const archive = (
+      await createNakamaDataExport({ rootDir: getUserConfigDir() })
+    ).data;
+
+    // Opens and keeps the org's group file, which the archive does not have.
+    createAgentGroup("org_restore", "u1", "Launch", ["p1", "p2"]);
+
+    const restoreResponse = await app.fetch(
+      new Request("http://localhost:4310/v1/auth/setup/import/restore", {
+        body: JSON.stringify({
+          confirm: true,
+          data: archive.toString("base64"),
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      })
+    );
+
+    expect(restoreResponse.status).toBe(200);
+    expect(listAgentGroups("org_restore", "u1")).toEqual([]);
   });
 
   test("setup restore keeps 200 with requiresRestart when onDataRestored throws", async () => {
