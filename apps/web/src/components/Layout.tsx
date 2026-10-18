@@ -34,6 +34,7 @@ import {
   pageIdFromPath,
   pluginIdFromPath,
   SIDEBAR_PAGE_IDS,
+  sidebarPageId,
 } from "@/lib/navigation";
 
 export function Layout() {
@@ -163,7 +164,7 @@ function useAppShell() {
     headerLabel:
       (page === "chat" ? chatTitle : undefined) ||
       (activePlugin?.label ??
-        findNavItem(page)?.label ??
+        findNavItem(sidebarPageId(page))?.label ??
         activePluginId ??
         undefined),
     page,
@@ -207,7 +208,7 @@ function AppShellHeader({
   const hideTitle = page === "soul";
 
   const showCustomizeBack =
-    page !== "notifications" && !SIDEBAR_PAGE_IDS.includes(page);
+    page !== "notifications" && !SIDEBAR_PAGE_IDS.includes(sidebarPageId(page));
 
   // SAFETY: PageId is a string union; the lookup falls back when the key is absent.
   const backLabel =
