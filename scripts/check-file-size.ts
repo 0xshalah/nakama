@@ -39,8 +39,10 @@ for (const file of staged) {
   if (IGNORED_PATHS.some((pattern) => pattern.test(file))) {
     continue;
   }
+
   const bytes = Number(git(["cat-file", "-s", `:${file}`]).stdout.toString());
   const tokens = Math.ceil(bytes / BYTES_PER_TOKEN);
+
   if (tokens > MAX_TOKENS) {
     tooBig.push({ file, tokens });
   }
