@@ -285,7 +285,6 @@ describe("createHonoApp", () => {
       "/v1/notification-destinations",
       "/v1/notify/:destinationId",
       "/v1/platform/data/export",
-      "/v1/token-optimization",
     ]) {
       expect(paths.has(path)).toBe(false);
     }
