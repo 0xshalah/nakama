@@ -1,6 +1,6 @@
-import { OrgMemoryClient } from "./client-org-memory";
+import { AgentGroupsClient } from "./client-agent-groups";
 
-export class NakamaClient extends OrgMemoryClient {
+export class NakamaClient extends AgentGroupsClient {
   /** Independent request scope; changing its org never changes the parent client. */
   forOrg(orgId: string | null): NakamaClient {
     return new NakamaClient({
