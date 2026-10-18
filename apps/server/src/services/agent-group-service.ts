@@ -52,8 +52,10 @@ interface ActiveRun extends AgentGroupRun {
 }
 
 export class AgentGroupService {
-  // ponytail: in-memory run state per session, a restart ends a run (saved
-  // replies stay).
+  // ponytail: run state lives in this process. A restart ends a run (saved
+  // replies stay), and with several server instances behind one URL, Stop and
+  // `active` only reach the instance running the turn. Move it to the database
+  // when runs must be shared across instances.
   private readonly runs = new Map<string, ActiveRun>();
 
   constructor(
