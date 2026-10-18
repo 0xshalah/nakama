@@ -7,6 +7,9 @@ if [ -z "$STAGED_FILES" ]; then
   exit 0
 fi
 
+# Block files over 5,000 tokens
+bun run scripts/check-file-size.ts || exit 1
+
 # Run formatter, capturing the exit code so we can still re-stage and report
 FORMAT_EXIT_CODE=0
 bun x ultracite fix --staged || FORMAT_EXIT_CODE=$?
