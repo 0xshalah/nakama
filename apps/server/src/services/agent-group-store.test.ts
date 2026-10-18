@@ -133,13 +133,12 @@ describe("agent group store", () => {
 
   test("reads the file on disk again once its handle is closed", () => {
     createAgentGroup(ORG_ID, "u1", "Launch", ["p1", "p2"]);
-    const path = join(getOrgConfigDir(ORG_ID), "agent-groups.sqlite");
-
-    // The open handle keeps the replaced file, as after a data restore.
-    rmSync(path);
-    expect(listAgentGroups(ORG_ID, "u1")).not.toEqual([]);
-
     closeAgentGroupDatabases();
+
+    // Replaced as a data restore would. A kept handle would still read the
+    // old file on POSIX, and Windows refuses to delete an open one.
+    rmSync(join(getOrgConfigDir(ORG_ID), "agent-groups.sqlite"));
+
     expect(listAgentGroups(ORG_ID, "u1")).toEqual([]);
   });
 });

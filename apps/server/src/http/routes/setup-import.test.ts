@@ -1,9 +1,10 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getUserConfigDir } from "@nakama/core";
 import { unzipSync, zipSync } from "fflate";
 import {
+  closeAgentGroupDatabases,
   createAgentGroup,
   listAgentGroups,
 } from "../../services/agent-group-store";
@@ -17,6 +18,9 @@ import { sessionTurnRegistry } from "../../services/session-turn-registry";
 import { setupTestConfigDir } from "../../test-config-dir";
 import { createMinimalHonoApp } from "../test-app-helpers";
 import { loginPlatformAdminSession } from "../test-session-helpers";
+
+// Before the config dir cleanup, which Windows refuses while a file is open.
+afterEach(closeAgentGroupDatabases);
 
 setupTestConfigDir("nakama-setup-import-routes-test-");
 
