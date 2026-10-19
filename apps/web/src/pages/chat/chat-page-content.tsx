@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@nakama/ui/dialog";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
 import { ArtifactStreamingPanelBridge } from "@/components/chat/artifact-streaming-panel-bridge";
 import { BrowserLiveViewPanelBridge } from "@/components/chat/browser-live-view-panel-bridge";
@@ -26,7 +26,17 @@ import { shouldShowCognitoControl } from "@/pages/chat/chat-page.shared";
 import { ChatPageColumn, ChatWelcome } from "@/pages/chat/chat-page-layout";
 import type { ChatPageState } from "@/pages/chat/use-chat-page";
 
-export function ChatPageContent(state: ChatPageState) {
+export function ChatPageContent({
+  below,
+  cognitoLocked = false,
+  onBtw,
+  ...state
+}: ChatPageState & {
+  below?: ReactNode;
+  /** Cognito cannot be turned off here: no toggle, no cognito surface. */
+  cognitoLocked?: boolean;
+  onBtw?: (question: string) => void;
+}) {
   const {
     session,
     messages,
@@ -76,17 +86,21 @@ export function ChatPageContent(state: ChatPageState) {
 
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
 
-  const cognitoControl = shouldShowCognitoControl(cognito, isEmptyState) ? (
-    // Pinned to the column's top-right corner, which is the top right of the
-    // screen area. The backdrop keeps it readable over a scrolling transcript.
-    <div className="absolute top-2 right-3 z-20 rounded-full backdrop-blur sm:right-6">
-      <ChatCognitoControl
-        cognito={cognito}
-        disabled={busy || readOnlySession}
-        onCognitoChange={handleCognitoChange}
-      />
-    </div>
-  ) : null;
+  // A locked cognito chat looks like a normal one: it has no other mode.
+  const cognitoSurface = cognito && !cognitoLocked;
+
+  const cognitoControl =
+    !cognitoLocked && shouldShowCognitoControl(cognito, isEmptyState) ? (
+      // Pinned to the column's top-right corner, which is the top right of the
+      // screen area. The backdrop keeps it readable over a scrolling transcript.
+      <div className="absolute top-2 right-3 z-20 rounded-full backdrop-blur sm:right-6">
+        <ChatCognitoControl
+          cognito={cognito}
+          disabled={busy || readOnlySession}
+          onCognitoChange={handleCognitoChange}
+        />
+      </div>
+    ) : null;
 
   const { visible: showUsage } = useChatUsageVisible();
   const sessionUsage = useMemo(() => sumChatUsage(messages), [messages]);
@@ -125,6 +139,7 @@ export function ChatPageContent(state: ChatPageState) {
         draftStorageKey={composerDraftKey}
         error={error}
         headerNotice={skillReviewBanner}
+        onBtw={onBtw}
         onConnectProvider={() => setProviderDialogOpen(true)}
         onModelChange={handleModelChange}
         onStop={stopStreaming}
@@ -155,8 +170,8 @@ export function ChatPageContent(state: ChatPageState) {
   );
 
   const content = isEmptyState ? (
-    <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
-      <ChatPageColumn centered cognito={cognito}>
+    <ChatAttachmentPanelProvider below={below} key={session?.id ?? "new"}>
+      <ChatPageColumn centered cognito={cognitoSurface}>
         {cognitoControl}
         <div className="mx-auto mb-12 flex w-full max-w-3xl flex-col gap-1">
           <ChatWelcome
@@ -172,10 +187,10 @@ export function ChatPageContent(state: ChatPageState) {
       </ChatPageColumn>
     </ChatAttachmentPanelProvider>
   ) : (
-    <ChatAttachmentPanelProvider key={session?.id ?? "new"}>
+    <ChatAttachmentPanelProvider below={below} key={session?.id ?? "new"}>
       <ArtifactStreamingPanelBridge messages={messages} profileId={profileId} />
       <BrowserLiveViewPanelBridge messages={messages} sessionId={session?.id} />
-      <ChatPageColumn cognito={cognito}>
+      <ChatPageColumn cognito={cognitoSurface}>
         {cognitoControl}
         <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
