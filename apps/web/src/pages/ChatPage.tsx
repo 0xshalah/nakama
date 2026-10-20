@@ -1,14 +1,25 @@
-import { useEffect } from "react";
-import { BtwChatPanel } from "@/components/chat/btw-chat";
+import { lazy, Suspense, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 import { useBtwChatStore } from "@/context/btw-chat-store";
 import { ChatPageContent } from "@/pages/chat/chat-page-content";
 import { useChatPage } from "@/pages/chat/use-chat-page";
 
+const BtwChatPanel = lazy(async () => ({
+  default: (await import("@/components/chat/btw-chat")).BtwChatPanel,
+}));
+
 export function ChatPage() {
   const state = useChatPage();
+  const { sessionId } = useParams();
   const openBtw = useBtwChatStore((store) => store.open);
   const btwOpen = useBtwChatStore((store) => store.chat !== null);
+
+  useEffect(() => {
+    if (sessionId) {
+      void import("@/components/chat/chat-message-list");
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     const focusComposer = (event: KeyboardEvent) => {
@@ -45,7 +56,13 @@ export function ChatPage() {
   return (
     <ChatPageContent
       {...state}
-      below={btwOpen ? <BtwChatPanel /> : null}
+      below={
+        btwOpen ? (
+          <Suspense fallback={null}>
+            <BtwChatPanel />
+          </Suspense>
+        ) : null
+      }
       onBtw={(question) =>
         openBtw({
           orgId: useActiveChatProfileStore.getState().orgId,
