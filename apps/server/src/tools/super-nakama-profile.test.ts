@@ -561,6 +561,7 @@ describe("super nakama create_group", () => {
 
     // SAFETY: create_group never touches the profile service.
     const profileService = {} as ProfileService;
+
     const tool = createSuperNakamaTools(
       profileService,
       new SuperNakamaSessionState(),
