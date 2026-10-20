@@ -11,6 +11,7 @@ import {
   PackageIcon,
   Plug01Icon,
   PlusSignSquareIcon,
+  PuzzleIcon,
   Settings01Icon,
   SharedWifiIcon,
   SlidersHorizontalIcon,
@@ -99,7 +100,12 @@ const NAV_GROUPS: NavGroup[] = [
         SharedWifiIcon
       ),
       navItem("plugin-management", "Plugins", "Manage plugins", PackageIcon),
-      navItem("composio", "Connectors", "Connect apps", Plug01Icon),
+      navItem(
+        "composio",
+        "Connections",
+        "Connect apps and manage plugins",
+        PuzzleIcon
+      ),
     ],
     label: "Chat",
   },
@@ -176,11 +182,15 @@ export const SIDEBAR_PAGE_IDS: readonly PageId[] = [
   "chat",
   "profiles",
   "groups",
-  "plugin-management",
   "composio",
   "automations",
   "customize",
 ];
+
+/** Plugins is a tab of Connections, so it lights up the Connections item. */
+export function sidebarPageId(page: PageId): PageId {
+  return page === "plugin-management" ? "composio" : page;
+}
 
 export const STANDALONE_PAGES: Partial<Record<PageId, NavItem>> = {
   notifications: navItem(

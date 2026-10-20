@@ -30,14 +30,26 @@ export interface ReservedSlashCommand {
   name: string;
 }
 
+/** A plugin page the active agent can open with `/open <pluginId>`. */
+export interface ComposerOpenPlugin {
+  label: string;
+  pluginId: string;
+}
+
 export type ComposerSlashSuggestion =
   | { kind: "command"; command: ReservedSlashCommand }
+  | { kind: "plugin"; plugin: ComposerOpenPlugin }
   | { kind: "skill"; skill: SkillSummary };
 
 /** Anything the composer picker lists: slash entries plus `@` mentions. */
 export type ComposerSuggestion =
   | ComposerSlashSuggestion
   | { kind: "mention"; mention: ReservedSlashCommand };
+
+// `/open <plugin>` keeps the picker open past the space, unlike other commands.
+const OPEN_PLUGIN_QUERY_PATTERN = /^open\s+[a-z0-9-]*$/i;
+
+const OPEN_PLUGIN_COMMAND_PATTERN = /^\/open\s+(\S+)$/i;
 
 const EXPLICIT_SKILL_TOKEN_PATTERN = /(?:^|\s)\/skill\s+([a-z0-9-]+)\b/g;
 
@@ -85,6 +97,14 @@ const COMPOSER_ADD_SLASH_COMMANDS: ReservedSlashCommand[] = [
   },
 ];
 
+/** Opens a side chat next to the page. Shown on the main chat page only. */
+const BTW_SLASH_COMMAND: ReservedSlashCommand = {
+  description: "Ask a side question in a new chat",
+  name: "btw",
+};
+
+const BTW_COMMAND_PATTERN = /^\/btw(?:\s+([\s\S]*))?$/i;
+
 /** `@` tokens the server acts on (`@image` asks the agent for generate_image). */
 const COMPOSER_MENTIONS: ReservedSlashCommand[] = [
   {
@@ -121,7 +141,10 @@ export function findActiveSkillSlashRange(
 
   const query = value.slice(slashIndex + 1, boundedCursor);
 
-  if (/\s/.test(query)) {
+  if (
+    /\s/.test(query) &&
+    !(trigger === "/" && OPEN_PLUGIN_QUERY_PATTERN.test(query))
+  ) {
     return null;
   }
 
@@ -180,6 +203,54 @@ export function matchComposerAddCommand(
   return command?.action ?? null;
 }
 
+/** The question a sent `/btw …` asks (empty for a bare `/btw`), or null. */
+export function matchComposerBtwCommand(text: string): string | null {
+  const match = BTW_COMMAND_PATTERN.exec(text.trim());
+
+  return match ? (match[1] ?? "").trim() : null;
+}
+
+/** Plugin pages that match `/o`, `/open`, or `/open dat`, by id or label. */
+function filterOpenPluginSuggestions(
+  plugins: ComposerOpenPlugin[],
+  query: string
+): ComposerSlashSuggestion[] {
+  const [command = "", ...rest] = query.trim().toLowerCase().split(/\s+/);
+  const needle = rest.join(" ");
+
+  if (
+    !(command && "open".startsWith(command)) ||
+    (needle && command !== "open")
+  ) {
+    return [];
+  }
+
+  return plugins.flatMap((plugin) =>
+    !needle ||
+    plugin.pluginId.includes(needle) ||
+    plugin.label.toLowerCase().includes(needle)
+      ? [{ kind: "plugin" as const, plugin }]
+      : []
+  );
+}
+
+/** The plugin a sent `/open <plugin>` names, matched by id or label. */
+export function matchComposerOpenCommand(
+  text: string,
+  plugins: ComposerOpenPlugin[]
+): ComposerOpenPlugin | null {
+  const name = OPEN_PLUGIN_COMMAND_PATTERN.exec(
+    text.trim()
+  )?.[1]?.toLowerCase();
+
+  return name
+    ? (plugins.find(
+        (plugin) =>
+          plugin.pluginId === name || plugin.label.toLowerCase() === name
+      ) ?? null)
+    : null;
+}
+
 function profileCanUseLearnCommand(skills: SkillSummary[]): boolean {
   return skills.some((skill) => skill.name === "manage-skills");
 }
@@ -213,8 +284,18 @@ export function filterSkillsForSlashQuery(
 export function filterComposerSlashSuggestions(
   skills: SkillSummary[],
   query: string,
-  options: { enableAddCommands?: boolean } = {}
+  options: {
+    enableAddCommands?: boolean;
+    enableBtw?: boolean;
+    openPlugins?: ComposerOpenPlugin[];
+  } = {}
 ): ComposerSlashSuggestion[] {
+  const btwCommands = options.enableBtw
+    ? filterReservedSlashCommands(query, [BTW_SLASH_COMMAND]).map(
+        (command) => ({ command, kind: "command" as const })
+      )
+    : [];
+
   const addCommands = options.enableAddCommands
     ? filterReservedSlashCommands(query, COMPOSER_ADD_SLASH_COMMANDS).map(
         (command) => ({
@@ -238,7 +319,18 @@ export function filterComposerSlashSuggestions(
     })
   );
 
-  return [...addCommands, ...learnCommands, ...skillSuggestions];
+  const pluginSuggestions = filterOpenPluginSuggestions(
+    options.openPlugins ?? [],
+    query
+  );
+
+  return [
+    ...btwCommands,
+    ...addCommands,
+    ...learnCommands,
+    ...pluginSuggestions,
+    ...skillSuggestions,
+  ];
 }
 
 export function replaceSlashRangeWithSkillInvocation(

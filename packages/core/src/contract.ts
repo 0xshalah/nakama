@@ -1068,6 +1068,7 @@ export interface CreateSessionResponse {
 
 export interface UpdateSessionRequest {
   model?: string | null;
+  parentSessionId?: null;
   pinned?: boolean;
   title?: string;
 }
@@ -1163,13 +1164,16 @@ export interface SessionStatusResponse {
 export interface SessionSummary {
   /** True while a turn is streaming for this session on the serving process. */
   active: boolean;
+  branchMessageIndex: number | null;
   channel: AgentChannel;
   createdAt: string;
   id: string;
   messageCount: number;
+  parentSessionId: string | null;
   pinned: boolean;
   preview: string | null;
   profileId: string;
+  sortPosition: number | null;
   title: string | null;
   updatedAt: string;
 }
@@ -1574,7 +1578,7 @@ export interface UpdateImageGenerationRequest {
 }
 
 /** Search back-end that replaces the provider-hosted `web_search` tool. */
-export type WebSearchProvider = "exa" | "firecrawl";
+export type WebSearchProvider = "exa" | "firecrawl" | "serply";
 
 export interface WebSearchSettingsResponse {
   apiKeyMasked: string | null;
@@ -3191,6 +3195,8 @@ export interface ToolDefinition<Input = unknown, Output = unknown> {
   description: string;
   /** Assigned tools in this group are loaded through discovery. */
   discoveryGroup?: string;
+  /** What the group is for, shown beside it in the discovery catalog. */
+  discoveryHint?: string;
   /** Plugins default to one turn; MCP discoveries can last for the session. */
   discoveryScope?: "session";
   /**

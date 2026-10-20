@@ -1,8 +1,5 @@
-import { hasActiveAgentQuestionnaire } from "@nakama/core/agent-questionnaire";
 import { hasActiveAgentTodos } from "@nakama/core/agent-todo";
 import type {
-  AgentQuestionAnswer,
-  AgentQuestionnaire,
   AgentTodo,
   ChatUsage,
   ProviderModelOption,
@@ -31,6 +28,8 @@ import { cn } from "@nakama/ui/utils";
 import {
   Add01Icon,
   Alert02Icon,
+  ArrowExpand01Icon,
+  ArrowShrink02Icon,
   ArrowUp02Icon,
   Cancel01Icon,
   File01Icon,
@@ -57,7 +56,6 @@ import {
   usePromptInputAttachments,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-import { AgentQuestionnairePanel } from "@/components/chat/AgentQuestionnairePanel";
 import { AgentTodoPanel } from "@/components/chat/AgentTodoPanel";
 import {
   ChatMessageQueuePanel,
@@ -70,16 +68,26 @@ import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overla
 import { ImageAttachmentPreview } from "@/components/chat/image-attachment-preview";
 import { TextAttachmentPreview } from "@/components/chat/text-attachment-preview";
 import { useAuth } from "@/context/use-auth";
+import { useOptionalChatAttachmentPanel } from "@/context/use-chat-attachment-panel";
+import {
+  useProfileQuery,
+  useSkillsQuery,
+  useToolsQuery,
+} from "@/hooks/use-app-queries";
+import { pluginAgentAccessState, useOrgPlugins } from "@/hooks/use-plugins";
 import type { ChatStatus, FileUIPart } from "@/lib/ai-ui-types";
 import {
   type ComposerAddCommandAction,
+  type ComposerOpenPlugin,
   type ComposerSuggestion,
   filterComposerMentionSuggestions,
   filterComposerSlashSuggestions,
   findActiveSkillSlashRange,
   getLeadingCommand,
   matchComposerAddCommand,
+  matchComposerBtwCommand,
   matchComposerLearningLoopCommand,
+  matchComposerOpenCommand,
   replaceSlashRangeWithReservedCommand,
   replaceSlashRangeWithSkillInvocation,
   type SkillSlashRange,
@@ -104,11 +112,13 @@ import {
 import { formatError } from "@/lib/client";
 import { prepareChatUploadFiles } from "@/lib/compress-image";
 import { encodeModelSelection } from "@/lib/models";
+import { enabledPluginNavEntries } from "@/lib/navigation";
 import {
   isPastedTextDocument,
   LONG_PASTE_WORD_THRESHOLD,
 } from "@/lib/pasted-text";
 import { THINKING_EFFORT_OPTIONS } from "@/lib/thinking-settings";
+import { PluginView } from "@/pages/PluginPage";
 import { composerActions } from "./chat-composer.shared";
 import { ChatComposerError, ChatTips } from "./chat-tips";
 
@@ -123,9 +133,7 @@ interface ChatComposerBaseProps {
   footerClassName?: string;
   onStop?: () => void;
   onSubmit: (text: string, files: FileUIPart[]) => void;
-  onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
   placeholder?: string;
-  questionnaire?: AgentQuestionnaire | null;
   queuedMessages?: QueuedComposerMessage[];
   todos?: AgentTodo[];
 }
@@ -139,6 +147,8 @@ interface ChatComposerFullProps extends ChatComposerBaseProps {
   contextUsage?: ChatContextUsage | null;
   currentModelSelection: string | null;
   headerNotice?: ReactNode;
+  /** Set on the main chat page: `/btw …` opens a side chat with the question. */
+  onBtw?: (question: string) => void;
   onConnectProvider?: () => void;
   onModelChange: (selection: string) => void;
   onThinkingEffortChange?: (effort: string) => void;
@@ -234,37 +244,20 @@ function ChatComposerOfflineHint({
 }
 
 function ChatComposerWorkStack({
-  busy,
-  disabled,
   hasQueuedMessages,
-  hasQuestionnaire,
-  onSubmitQuestionnaire,
   queueStackEdge,
-  questionnaire,
   queuedMessages,
   showTodos,
   todos,
 }: {
-  busy: boolean;
-  disabled: boolean;
   hasQueuedMessages: boolean;
-  hasQuestionnaire: boolean;
-  onSubmitQuestionnaire?: (answers: AgentQuestionAnswer[]) => void;
   queueStackEdge: ComposerStackEdge;
-  questionnaire: AgentQuestionnaire | null;
   queuedMessages: QueuedComposerMessage[];
   showTodos: boolean;
   todos: AgentTodo[];
 }) {
   return (
     <>
-      {hasQuestionnaire ? (
-        <AgentQuestionnairePanel
-          disabled={disabled || busy}
-          onSubmit={(answers) => onSubmitQuestionnaire?.(answers)}
-          questionnaire={questionnaire}
-        />
-      ) : null}
       {showTodos ? <AgentTodoPanel stack todos={todos} /> : null}
       {hasQueuedMessages ? (
         <ChatMessageQueuePanel
@@ -506,21 +499,12 @@ function resolveChatComposerLayout(
 ) {
   const isMinimal = props.variant === "minimal";
   const todos = props.todos ?? EMPTY_TODOS;
-  const questionnaire = props.questionnaire ?? null;
   const queuedMessages = props.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
   const hasQueuedMessages = queuedMessages.length > 0;
 
-  // Ask only once every turn is done: no stream in flight, nothing queued.
-  const hasQuestionnaire =
-    hasActiveAgentQuestionnaire(questionnaire) &&
-    !props.busy &&
-    !hasQueuedMessages;
+  const showTodos = hasActiveAgentTodos(todos) && !displayError;
 
-  const showTodos =
-    hasActiveAgentTodos(todos) && !hasQuestionnaire && !displayError;
-
-  const queueStackEdge: ComposerStackEdge =
-    hasQuestionnaire || showTodos ? "continue" : "start";
+  const queueStackEdge: ComposerStackEdge = showTodos ? "continue" : "start";
 
   const availableSkills = isMinimal
     ? EMPTY_SKILLS
@@ -530,16 +514,13 @@ function resolveChatComposerLayout(
     availableSkills,
     disabled: props.disabled ?? false,
     enableAddCommands: !isMinimal && enableAddCommands,
-    hasQuestionnaire,
     hasQueuedMessages,
     isMinimal,
     placeholder: props.placeholder ?? "Do anything...",
-    questionnaire,
     queuedMessages,
     queueStackEdge,
     showOfflineHint: !isMinimal && props.showOfflineHint === true,
-    showStacked:
-      (hasQuestionnaire || showTodos || hasQueuedMessages) && !isMinimal,
+    showStacked: (showTodos || hasQueuedMessages) && !isMinimal,
     showTips: !isMinimal && props.showTips === true,
     showTodos,
     skillPickerKey: availableSkills.map((skill) => skill.id).join("\0"),
@@ -582,12 +563,7 @@ function ChatComposerMain({
     return (
       <div className="relative flex w-full flex-col">
         <ChatComposerWorkStack
-          busy={props.busy}
-          disabled={layout.disabled}
-          hasQuestionnaire={layout.hasQuestionnaire}
           hasQueuedMessages={layout.hasQueuedMessages}
-          onSubmitQuestionnaire={props.onSubmitQuestionnaire}
-          questionnaire={layout.questionnaire}
           queuedMessages={layout.queuedMessages}
           queueStackEdge={layout.queueStackEdge}
           showTodos={layout.showTodos}
@@ -615,6 +591,86 @@ function ChatComposerMain({
     />
   );
 }
+
+const NO_OPEN_PLUGINS: ComposerOpenPlugin[] = [];
+
+/** Enabled plugin pages whose tools or skills the agent has, for `/open`. */
+function useAgentPluginViews(profileId: string | null): ComposerOpenPlugin[] {
+  const plugins = useOrgPlugins();
+  const profile = useProfileQuery(profileId);
+  const enabled = Boolean(profileId);
+  const tools = useToolsQuery({ enabled });
+  const skills = useSkillsQuery({ enabled });
+
+  if (!(profile.data && plugins.data && tools.data && skills.data)) {
+    return NO_OPEN_PLUGINS;
+  }
+
+  const resources = { skills: skills.data, tools: tools.data };
+
+  return enabledPluginNavEntries(plugins.data).flatMap(({ label, pluginId }) =>
+    pluginAgentAccessState(profile.data, pluginId, resources).assigned > 0
+      ? [{ label, pluginId }]
+      : []
+  );
+}
+
+/** Expand control for a plugin page in the side panel, like the artifact preview. */
+function PluginPanelExpandButton({ panelId }: { panelId: string }) {
+  const panel = useOptionalChatAttachmentPanel();
+  const fullscreen = panel?.isFullscreen ?? false;
+
+  return (
+    <Button
+      aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+      onClick={() =>
+        panel?.update(panelId, {
+          fullscreen: !fullscreen,
+          resizable: fullscreen,
+        })
+      }
+      size="icon-sm"
+      title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+      type="button"
+      variant="ghost"
+    >
+      {fullscreen ? (
+        <ArrowShrink02Icon aria-hidden className="size-4" />
+      ) : (
+        <ArrowExpand01Icon aria-hidden className="size-4" />
+      )}
+    </Button>
+  );
+}
+
+/** Plugin pages `/open` lists for the active agent, and how to show one. */
+const OpenPluginContext = createContext<{
+  open: (plugin: ComposerOpenPlugin) => void;
+  plugins: ComposerOpenPlugin[];
+}>({ open: () => undefined, plugins: NO_OPEN_PLUGINS });
+
+function composerBtwHandler(props: ChatComposerProps) {
+  return isFullComposer(props) ? props.onBtw : undefined;
+}
+
+/** Opens the side chat for a sent `/btw …`. True when it did. */
+function runBtwCommand(
+  text: string,
+  onBtw: ((question: string) => void) | undefined
+): boolean {
+  const question = onBtw ? matchComposerBtwCommand(text) : null;
+
+  if (question === null) {
+    return false;
+  }
+
+  onBtw?.(question);
+
+  return true;
+}
+
+/** True when `/btw` is offered: only the composer that can open a side chat. */
+const BtwCommandContext = createContext(false);
 
 const CommandPrefixContext = createContext<{
   prefix: string | null;
@@ -649,6 +705,43 @@ function ChatComposerCommandBanner({
         ×
       </button>
     </PromptInputHeader>
+  );
+}
+
+/** `/open` state for the composer: the agent's plugin pages, shown or hidden in the side panel. */
+function useOpenPluginContext(profileId: string | null) {
+  const panel = useOptionalChatAttachmentPanel();
+
+  const openPlugins = useAgentPluginViews(panel ? profileId : null);
+
+  return useMemo(
+    () => ({
+      open: (plugin: ComposerOpenPlugin) => {
+        const id = `plugin:${plugin.pluginId}`;
+
+        // A second /open for the same plugin closes it, like a toggle.
+        if (panel?.activeId === id) {
+          panel.hide(id);
+
+          return;
+        }
+
+        panel?.show({
+          bodyClassName: "flex flex-col overflow-hidden p-0",
+          content: (
+            <PluginView inlineHeaderActions pluginId={plugin.pluginId} />
+          ),
+          defaultWidth: 768,
+          fullscreen: false,
+          headerActions: <PluginPanelExpandButton panelId={id} />,
+          id,
+          resizable: true,
+          title: plugin.label,
+        });
+      },
+      plugins: openPlugins,
+    }),
+    [openPlugins, panel]
   );
 }
 
@@ -687,6 +780,12 @@ export function ChatComposer(props: ChatComposerProps) {
     setAddDialog(action);
   }, []);
 
+  const openPluginContext = useOpenPluginContext(
+    isFullComposer(props) ? (props.profileId ?? null) : null
+  );
+
+  const onBtw = composerBtwHandler(props);
+
   const canAddCapabilities =
     isFullComposer(props) &&
     Boolean(props.profileId) &&
@@ -701,6 +800,24 @@ export function ChatComposer(props: ChatComposerProps) {
         : typedText;
 
       setCommandPrefix(null);
+
+      if (runBtwCommand(text, onBtw)) {
+        clearDraft();
+
+        return;
+      }
+
+      const openCommand = matchComposerOpenCommand(
+        text,
+        openPluginContext.plugins
+      );
+
+      if (openCommand) {
+        clearDraft();
+        openPluginContext.open(openCommand);
+
+        return;
+      }
 
       if (matchComposerLearningLoopCommand(text)) {
         clearDraft();
@@ -732,12 +849,6 @@ export function ChatComposer(props: ChatComposerProps) {
       clearDraft();
       props.onSubmit(text, files);
     },
-    onSubmitQuestionnaire: props.onSubmitQuestionnaire
-      ? (answers) => {
-          clearDraft();
-          props.onSubmitQuestionnaire?.(answers);
-        }
-      : undefined,
   };
 
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -756,41 +867,45 @@ export function ChatComposer(props: ChatComposerProps) {
 
   return (
     <CommandPrefixContext.Provider value={commandContext}>
-      <div className={cn("w-full shrink-0", props.className)}>
-        {layout.showOfflineHint && isFullComposer(props) ? (
-          <ChatComposerOfflineHint
-            onConnectProvider={props.onConnectProvider}
-          />
-        ) : null}
-        <ChatComposerMain
-          displayError={displayError}
-          layout={layout}
-          onAddCommand={openAddCommand}
-          props={composerProps}
-          setAttachmentError={setAttachmentError}
-        />
-        {addProfileId ? (
-          <ChatAddCapabilitiesDialogs
-            mcpOpen={addDialog === "add-mcp"}
-            onMcpOpenChange={(open) => {
-              setAddDialog(open ? "add-mcp" : null);
-            }}
-            onPluginOpenChange={(open) =>
-              setAddDialog(open ? "add-plugin" : null)
-            }
-            onSkillOpenChange={(open) => {
-              setAddDialog(open ? "add-skill" : null);
-            }}
-            onToolOpenChange={(open) => {
-              setAddDialog(open ? "add-tool" : null);
-            }}
-            pluginOpen={addDialog === "add-plugin"}
-            profileId={addProfileId}
-            skillOpen={addDialog === "add-skill"}
-            toolOpen={addDialog === "add-tool"}
-          />
-        ) : null}
-      </div>
+      <BtwCommandContext.Provider value={Boolean(onBtw)}>
+        <OpenPluginContext.Provider value={openPluginContext}>
+          <div className={cn("w-full shrink-0", props.className)}>
+            {layout.showOfflineHint && isFullComposer(props) ? (
+              <ChatComposerOfflineHint
+                onConnectProvider={props.onConnectProvider}
+              />
+            ) : null}
+            <ChatComposerMain
+              displayError={displayError}
+              layout={layout}
+              onAddCommand={openAddCommand}
+              props={composerProps}
+              setAttachmentError={setAttachmentError}
+            />
+            {addProfileId ? (
+              <ChatAddCapabilitiesDialogs
+                mcpOpen={addDialog === "add-mcp"}
+                onMcpOpenChange={(open) => {
+                  setAddDialog(open ? "add-mcp" : null);
+                }}
+                onPluginOpenChange={(open) =>
+                  setAddDialog(open ? "add-plugin" : null)
+                }
+                onSkillOpenChange={(open) => {
+                  setAddDialog(open ? "add-skill" : null);
+                }}
+                onToolOpenChange={(open) => {
+                  setAddDialog(open ? "add-tool" : null);
+                }}
+                pluginOpen={addDialog === "add-plugin"}
+                profileId={addProfileId}
+                skillOpen={addDialog === "add-skill"}
+                toolOpen={addDialog === "add-tool"}
+              />
+            ) : null}
+          </div>
+        </OpenPluginContext.Provider>
+      </BtwCommandContext.Provider>
     </CommandPrefixContext.Provider>
   );
 }
@@ -814,6 +929,8 @@ function ChatComposerTextarea({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [slashRange, setSlashRange] = useState<SkillSlashRange | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const openPlugin = useContext(OpenPluginContext);
+  const enableBtw = useContext(BtwCommandContext);
 
   const mentionOpen =
     slashRange !== null && controller.textInput.value[slashRange.start] === "@";
@@ -827,8 +944,17 @@ function ChatComposerTextarea({
       ? filterComposerMentionSuggestions(slashRange.query)
       : filterComposerSlashSuggestions(availableSkills, slashRange.query, {
           enableAddCommands: onAddCommand != null,
+          enableBtw,
+          openPlugins: openPlugin.plugins,
         });
-  }, [availableSkills, mentionOpen, onAddCommand, slashRange]);
+  }, [
+    availableSkills,
+    enableBtw,
+    mentionOpen,
+    onAddCommand,
+    openPlugin.plugins,
+    slashRange,
+  ]);
 
   const pickerOpen = Boolean(slashRange && !disabled && suggestions.length > 0);
 
@@ -860,6 +986,17 @@ function ChatComposerTextarea({
         );
 
       if (!activeRange) {
+        return;
+      }
+
+      if (suggestion.kind === "plugin") {
+        controller.textInput.setInput(
+          `${value.slice(0, activeRange.start)}${value.slice(activeRange.end)}`
+        );
+        setSlashRange(null);
+        setActiveIndex(0);
+        openPlugin.open(suggestion.plugin);
+
         return;
       }
 
@@ -915,7 +1052,7 @@ function ChatComposerTextarea({
         textareaRef.current?.focus();
       });
     },
-    [controller.textInput, onAddCommand, slashRange]
+    [controller.textInput, onAddCommand, openPlugin, slashRange]
   );
 
   const { prefix, setPrefix } = useContext(CommandPrefixContext);

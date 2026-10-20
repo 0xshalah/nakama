@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SkillSummary } from "@nakama/core/contract";
 import {
+  type ComposerSlashSuggestion,
   filterComposerMentionSuggestions,
   filterComposerSlashSuggestions,
   filterReservedSlashCommands,
@@ -11,10 +12,25 @@ import {
   getReservedCommandTokenRanges,
   getSkillTokenRanges,
   matchComposerAddCommand,
+  matchComposerBtwCommand,
   matchComposerLearningLoopCommand,
+  matchComposerOpenCommand,
   replaceSlashRangeWithReservedCommand,
   replaceSlashRangeWithSkillInvocation,
 } from "./chat-composer-skills";
+
+const openPlugins = [
+  { label: "Data View", pluginId: "data-view" },
+  { label: "Workflows", pluginId: "workflows" },
+];
+
+function suggestionName(item: ComposerSlashSuggestion): string {
+  if (item.kind === "command") {
+    return item.command.name;
+  }
+
+  return item.kind === "plugin" ? item.plugin.pluginId : item.skill.name;
+}
 
 const weatherSkill = skill({
   description: "Get weather forecasts.",
@@ -152,8 +168,7 @@ describe("filterComposerSlashSuggestions", () => {
   test("lists reserved /learn ahead of skills when manage-skills is assigned", () => {
     expect(
       filterComposerSlashSuggestions([manageSkillsSkill, weatherSkill], "").map(
-        (item) =>
-          item.kind === "command" ? item.command.name : item.skill.name
+        suggestionName
       )
     ).toEqual(["enable-learning-loop", "learn", "weather"]);
   });
@@ -161,8 +176,7 @@ describe("filterComposerSlashSuggestions", () => {
   test("hides /learn when manage-skills is not assigned", () => {
     expect(
       filterComposerSlashSuggestions([weatherSkill, deploySkill], "").map(
-        (item) =>
-          item.kind === "command" ? item.command.name : item.skill.name
+        suggestionName
       )
     ).toEqual(["weather", "deploy"]);
     expect(filterComposerSlashSuggestions([weatherSkill], "lea")).toEqual([]);
@@ -203,16 +217,12 @@ describe("filterComposerSlashSuggestions", () => {
     expect(
       filterComposerSlashSuggestions([weatherSkill], "add", {
         enableAddCommands: true,
-      }).map((item) =>
-        item.kind === "command" ? item.command.name : item.skill.name
-      )
+      }).map(suggestionName)
     ).toEqual(["add-plugin", "add-tool", "add-mcp", "add-skill"]);
     expect(
       filterComposerSlashSuggestions([weatherSkill], "add-t", {
         enableAddCommands: true,
-      }).map((item) =>
-        item.kind === "command" ? item.command.name : item.skill.name
-      )
+      }).map(suggestionName)
     ).toEqual(["add-tool"]);
   });
 });
@@ -225,6 +235,29 @@ describe("matchComposerAddCommand", () => {
     expect(matchComposerAddCommand("/add-skill")).toBe("add-skill");
     expect(matchComposerAddCommand("/add-plugin workflows")).toBeNull();
     expect(matchComposerAddCommand("/add-tool please")).toBeNull();
+  });
+});
+
+describe("/btw side chat command", () => {
+  test("returns the question, or empty for a bare command", () => {
+    expect(matchComposerBtwCommand("/btw what is RAG?")).toBe("what is RAG?");
+    expect(matchComposerBtwCommand("  /btw  ")).toBe("");
+    expect(matchComposerBtwCommand("/btw line one\nline two")).toBe(
+      "line one\nline two"
+    );
+    expect(matchComposerBtwCommand("/btwx")).toBeNull();
+    expect(matchComposerBtwCommand("please /btw")).toBeNull();
+  });
+
+  test("is listed only when enabled", () => {
+    const names = (enableBtw: boolean) =>
+      filterComposerSlashSuggestions([], "bt", { enableBtw }).map(
+        (suggestion) =>
+          suggestion.kind === "command" ? suggestion.command.name : null
+      );
+
+    expect(names(true)).toContain("btw");
+    expect(names(false)).not.toContain("btw");
   });
 });
 
@@ -402,5 +435,42 @@ describe("getLeadingCommand", () => {
 
   test("ignores a command mid-sentence", () => {
     expect(getLeadingCommand("run /skill weather", [weatherSkill])).toBeNull();
+  });
+});
+
+describe("/open plugin command", () => {
+  test("lists the agent's plugins while typing /open and narrows by name", () => {
+    const names = (query: string) =>
+      filterComposerSlashSuggestions([weatherSkill], query, {
+        openPlugins,
+      }).map(suggestionName);
+
+    expect(names("op")).toEqual(["data-view", "workflows"]);
+    expect(names("open data")).toEqual(["data-view"]);
+    expect(names("open work")).toEqual(["workflows"]);
+    expect(names("wea")).toEqual(["weather"]);
+    expect(names("")).toEqual(["weather"]);
+  });
+
+  test("keeps the picker open after the space in /open", () => {
+    expect(findActiveSkillSlashRange("/open dat", 9)).toEqual({
+      end: 9,
+      query: "open dat",
+      start: 0,
+    });
+    expect(findActiveSkillSlashRange("/learn dat", 10)).toBeNull();
+  });
+
+  test("a sent /open matches a plugin by id or label", () => {
+    expect(matchComposerOpenCommand("/open data-view", openPlugins)).toEqual(
+      openPlugins[0]
+    );
+    expect(matchComposerOpenCommand(" /open Workflows ", openPlugins)).toEqual(
+      openPlugins[1]
+    );
+    expect(matchComposerOpenCommand("/open notes", openPlugins)).toBeNull();
+    expect(
+      matchComposerOpenCommand("please /open data-view", openPlugins)
+    ).toBeNull();
   });
 });

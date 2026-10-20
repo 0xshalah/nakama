@@ -3,39 +3,19 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@nakama/ui/tooltip";
 import { cn } from "@nakama/ui/utils";
 import { ArrowLeft01Icon, ArrowRight01Icon } from "hugeicons-react";
 import type { ElementType } from "react";
-import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { GroupRecents } from "@/components/agent-groups/group-recents";
 import { OrgSwitcher } from "@/components/OrgSwitcher";
-import {
-  PinnedChats,
-  RecentChatRow,
-  RecentChatSearch,
-  RecentChatsDialogs,
-  RecentsHeader,
-  SessionRowSkeletons,
-  type SessionTarget,
-} from "@/components/sidebar-recents";
-import { useActiveChatProfile } from "@/context/use-active-chat-profile";
+import { RecentChats } from "@/components/SidebarRecentChats";
 import { useAuth } from "@/context/use-auth";
-import { usePrefetchAppData, useProfilesQuery } from "@/hooks/use-app-queries";
+import { usePrefetchAppData } from "@/hooks/use-app-queries";
 import { useAutomationUnreadTotal } from "@/hooks/use-automations";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import {
-  useDeleteSessionMutation,
-  useHistorySessionsQuery,
-  useUpdateSessionMutation,
-} from "@/hooks/use-resource-mutations";
-import {
-  useLocalStorageFlag,
   usePinnedPlugins,
   useSidebarCollapsed,
 } from "@/hooks/use-sidebar-collapsed";
-import {
-  buildChatPath,
-  chatProfileIdFromPath,
-  resolveRecentChatsProfileId,
-} from "@/lib/chat-history";
+import { chatProfileIdFromPath } from "@/lib/chat-history";
 import {
   enabledPluginNavEntries,
   groupPath,
@@ -47,13 +27,9 @@ import {
   pluginIcon,
   pluginIdFromPath,
   SIDEBAR_PAGE_IDS,
+  sidebarPageId,
   visibleNavGroups,
 } from "@/lib/navigation";
-import { sessionSearchQuery } from "@/lib/session-list";
-import {
-  getInitialRecentsCollapsed,
-  SIDEBAR_RECENTS_COLLAPSED_KEY,
-} from "@/lib/sidebar";
 
 export function AppSidebar({
   variant = "shell",
@@ -63,8 +39,7 @@ export function AppSidebar({
   variant?: "drawer" | "shell";
 }) {
   const location = useLocation();
-  const page = pageIdFromPath(location.pathname) ?? "chat";
-  // Inside a group, "New chat" and Recents belong to that group.
+  const page = sidebarPageId(pageIdFromPath(location.pathname) ?? "chat");
   const groupRoute = groupRouteFromPath(location.pathname);
   const { user, activeOrg } = useAuth();
   const prefetchAppData = usePrefetchAppData();
@@ -168,188 +143,6 @@ export function AppSidebar({
         )}
       </nav>
     </aside>
-  );
-}
-
-function RecentChats() {
-  const location = useLocation();
-  const { activeOrg } = useAuth();
-  const { profileId: liveChatProfileId, orgId } = useActiveChatProfile();
-  const { data: profiles = [] } = useProfilesQuery();
-
-  const profileId =
-    resolveRecentChatsProfileId({
-      liveChatProfileId:
-        chatProfileIdFromPath(location.pathname) ??
-        (orgId === activeOrg?.id ? liveChatProfileId : null),
-      orgId: activeOrg?.id,
-      profiles,
-      search: location.search,
-    }) ?? "";
-
-  const history = useHistorySessionsQuery(profileId);
-  const [search, setSearch] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  // Typing waits a moment before asking the server; clearing is immediate.
-  useEffect(() => {
-    const next = sessionSearchQuery(search);
-
-    if (!next) {
-      setSearchQuery("");
-
-      return;
-    }
-
-    const timer = setTimeout(() => setSearchQuery(next), 250);
-
-    return () => clearTimeout(timer);
-  }, [search]);
-  // Idle until there is a search, then its own paged list.
-  const results = useHistorySessionsQuery(profileId, searchQuery);
-  const list = searchQuery ? results : history;
-  const { data: sessions } = history;
-  const { fetchNextPage, hasNextPage, isFetchingNextPage } = list;
-  const [pageEnd, setPageEnd] = useState<HTMLDivElement | null>(null);
-  // Rebuilt after each page, because an observer reports only changes: a page
-  // too short to push the sentinel out of view would otherwise be the last.
-  useEffect(() => {
-    if (!(pageEnd && hasNextPage) || isFetchingNextPage) {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          void fetchNextPage();
-        }
-      },
-      // The list scrolls inside its own box, so that box is the root, and the
-      // margin starts the next page a little before the end comes into view.
-      { root: pageEnd.parentElement, rootMargin: "0px 0px 200px 0px" }
-    );
-
-    observer.observe(pageEnd);
-
-    return () => observer.disconnect();
-  }, [pageEnd, hasNextPage, isFetchingNextPage, fetchNextPage]);
-  const updateSession = useUpdateSessionMutation();
-  const deleteSession = useDeleteSessionMutation();
-  const [deleteTarget, setDeleteTarget] = useState<SessionTarget | null>(null);
-  const [renameTarget, setRenameTarget] = useState<SessionTarget | null>(null);
-
-  const { collapsed, toggle } = useLocalStorageFlag(
-    SIDEBAR_RECENTS_COLLAPSED_KEY,
-    getInitialRecentsCollapsed
-  );
-
-  const pinnedSessions = sessions.filter((session) => session.pinned);
-  const recentSessions = sessions.filter((session) => !session.pinned);
-
-  const renderSession = (session: (typeof sessions)[number]) => (
-    <RecentChatRow
-      item={{
-        active: session.active,
-        href: buildChatPath(profileId, session.id),
-        id: session.id,
-        pinned: session.pinned,
-        title: session.title?.trim() || "Untitled chat",
-      }}
-      key={session.id}
-      onDelete={setDeleteTarget}
-      onRename={setRenameTarget}
-      onTogglePin={() =>
-        void updateSession.mutateAsync({
-          input: { pinned: !session.pinned },
-          profileId,
-          sessionId: session.id,
-        })
-      }
-    />
-  );
-
-  const renderList = (rows: typeof sessions, emptyText: string | null) => (
-    <div className="no-scrollbar min-h-0 overflow-y-auto">
-      {list.isLoading && <SessionRowSkeletons />}
-      {list.error && (
-        <p className="px-3 py-2 text-muted-foreground text-xs" role="status">
-          {searchQuery
-            ? "Couldn’t search chats."
-            : "Couldn’t load recent chats."}
-        </p>
-      )}
-      {!(list.isLoading || list.error) && rows.length === 0 && emptyText && (
-        <p className="px-3 py-2 text-muted-foreground text-xs">{emptyText}</p>
-      )}
-      {rows.map(renderSession)}
-      {isFetchingNextPage && <SessionRowSkeletons />}
-      {hasNextPage && <div aria-hidden="true" ref={setPageEnd} />}
-    </div>
-  );
-
-  return (
-    <div className="mt-5 flex min-h-0 flex-1 flex-col">
-      <PinnedChats renderRow={renderSession} rows={pinnedSessions} />
-      <RecentsHeader
-        collapsed={collapsed}
-        newChatHref={navHrefForPage("chat", profileId)}
-        onToggle={toggle}
-      />
-      {!collapsed && sessions.length > 0 ? (
-        <RecentChatSearch
-          onChange={setSearch}
-          search={search}
-          searchQuery={searchQuery}
-        />
-      ) : null}
-      {!collapsed && searchQuery
-        ? renderList(
-            results.data.filter((session) => !session.pinned),
-            results.data.length === 0 ? "No chats match" : null
-          )
-        : null}
-      {searchQuery || collapsed
-        ? null
-        : renderList(recentSessions, "No recent chats")}
-      <RecentChatsDialogs
-        deleteTarget={deleteTarget}
-        onDelete={async () => {
-          if (!deleteTarget) {
-            return;
-          }
-
-          await deleteSession.mutateAsync(deleteTarget.id);
-          setDeleteTarget(null);
-        }}
-        onRename={async (event) => {
-          event.preventDefault();
-
-          if (!renameTarget || updateSession.isPending) {
-            return;
-          }
-
-          const title = renameTarget.title.trim();
-
-          if (!title) {
-            return;
-          }
-
-          await updateSession.mutateAsync({
-            input: { title },
-            profileId,
-            sessionId: renameTarget.id,
-          });
-          setRenameTarget(null);
-        }}
-        onRenameTitleChange={(title) =>
-          setRenameTarget((current) =>
-            current ? { ...current, title } : current
-          )
-        }
-        renameTarget={renameTarget}
-        setDeleteTarget={setDeleteTarget}
-        setRenameTarget={setRenameTarget}
-      />
-    </div>
   );
 }
 
