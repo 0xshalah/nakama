@@ -42,6 +42,7 @@ const sessionChangesSchema = z
   });
 
 const SESSION_PATH = "/v1/agent-groups/{groupId}/sessions/{sessionId}";
+
 const THREAD_PATH = `${SESSION_PATH}/threads/{messageId}`;
 
 // [method, path, summary, status, body]: documents the plain routes below in

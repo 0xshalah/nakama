@@ -131,11 +131,13 @@ describe("AgentGroupService", () => {
 
   test("every agent gets the group brief as context", async () => {
     const tasks: string[] = [];
+
     const { chat, service } = setup(({ task }) => {
       tasks.push(task);
 
       return "ok";
     });
+
     const group = await service.create(
       ORG_ID,
       USER_ID,
@@ -325,6 +327,7 @@ describe("AgentGroupService", () => {
 
     const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
     const sessionId = await chat(group.id, "@beta hello");
+
     const [, root] = service.session(
       ORG_ID,
       USER_ID,
@@ -368,6 +371,7 @@ describe("AgentGroupService", () => {
     const { chat, service } = setup(() => "ok");
     const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
     const sessionId = await chat(group.id, "@alpha hi");
+
     const [own] = service.session(
       ORG_ID,
       USER_ID,
@@ -377,6 +381,6 @@ describe("AgentGroupService", () => {
 
     expect(() =>
       service.thread(ORG_ID, USER_ID, group.id, sessionId, own!.id)
-    ).toThrow("Message not found");
+    ).toThrow(expect.objectContaining({ status: 404 }));
   });
 });
