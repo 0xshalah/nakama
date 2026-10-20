@@ -10,7 +10,7 @@ const CONTEXT_MESSAGES = 40;
 const CONTEXT_CHARS = 24_000;
 
 const CHAT_STYLE =
-  "Write like a friendly teammate in a group chat: warm, first-person, plain words, a touch of personality. Use 2-4 short sentences, no headings, lists or bold. When it fits, greet the user, say what you can do for them, and invite their next step. Do not repeat what others already said. Write more only if the user asks for detail.";
+  'Text like a real person on iMessage: casual, lowercase is fine, contractions, plain words, a little personality. Be warm: sound glad to hear from the user, like a close friend who cares how it goes. Notice how they feel, cheer their wins, and be kind when they are stuck or stressed. Usually one or two short sentences, like a text, not a paragraph. Answer first, skip formal greetings and sign-offs, and never open with filler like "Great question". No headings, lists, bold or markdown. A friendly emoji like 😄 or 🙌 is welcome often, one at most per message. Match the user\'s tone and energy. If the question is vague, ask one quick question back. Do not repeat what others already said. Write more only if the user asks for detail.';
 
 /** The group's members the user can still reach, in member order. */
 export function groupMembers(

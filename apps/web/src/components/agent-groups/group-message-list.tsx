@@ -28,7 +28,6 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import { ThinkingState } from "@/components/chat/ThinkingState";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 
 /** Same threshold as the agent chat list. */
@@ -259,7 +258,18 @@ export function GroupMessageList({
           Date.parse(message.createdAt) - Date.parse(previous.createdAt) >
             TIME_GAP_MS;
 
+        const next = messages[index + 1];
+
+        const nextShowTime =
+          next !== undefined &&
+          Date.parse(next.createdAt) - Date.parse(message.createdAt) >
+            TIME_GAP_MS;
+
         return {
+          endsGroup:
+            !next ||
+            nextShowTime ||
+            next.authorProfileId !== message.authorProfileId,
           message,
           showTime,
           startsGroup:
@@ -268,6 +278,13 @@ export function GroupMessageList({
       }),
     [messages]
   );
+
+  // iMessage marks only the newest message as delivered, and only while it is
+  // still the last word.
+  const deliveredId =
+    messages.at(-1)?.authorProfileId === null && (messages.at(-1)?.id ?? 0) > 0
+      ? messages.at(-1)?.id
+      : undefined;
 
   const speakerContinues =
     speaker !== undefined && messages.at(-1)?.authorProfileId === speaker.id;
@@ -293,89 +310,104 @@ export function GroupMessageList({
           ref={scrollRef}
         >
           <div className="flex flex-col px-4 py-4" ref={contentRef}>
-            {rows.map(({ message, showTime, startsGroup }, index) => {
-              const spacing = index === 0 ? "" : startsGroup ? "mt-4" : "mt-1";
-              const author = profileById.get(message.authorProfileId ?? "");
+            {rows.map(
+              ({ endsGroup, message, showTime, startsGroup }, index) => {
+                const spacing =
+                  index === 0 ? "" : startsGroup ? "mt-3" : "mt-0.5";
 
-              return (
-                <Fragment key={keys[index]}>
-                  {showTime ? (
-                    <div
-                      className={cn(
-                        "text-center text-muted-foreground text-xs",
-                        index === 0 ? "pb-3" : "py-4"
-                      )}
-                    >
-                      {timeLabel(message.createdAt)}
-                    </div>
-                  ) : null}
-                  {message.authorProfileId === null ? (
-                    <div
-                      className={cn(
-                        "ml-auto w-fit max-w-[85%] whitespace-pre-wrap rounded-2xl bg-muted px-4 py-2.5",
-                        spacing
-                      )}
-                    >
-                      <MentionText
-                        handles={handles}
-                        profiles={profiles}
-                        text={message.content}
-                      />
-                    </div>
-                  ) : (
-                    <div className={cn("group flex gap-2.5", spacing)}>
-                      {startsGroup && author ? (
-                        <ProfileAvatar
-                          className="mt-0.5 outline-none"
-                          profile={author}
-                          size="sm"
-                        />
-                      ) : (
-                        <span
+                const author = profileById.get(message.authorProfileId ?? "");
+
+                return (
+                  <Fragment key={keys[index]}>
+                    {showTime ? (
+                      <div
+                        className={cn(
+                          "text-center text-muted-foreground text-xs",
+                          index === 0 ? "pb-3" : "py-4"
+                        )}
+                      >
+                        {timeLabel(message.createdAt)}
+                      </div>
+                    ) : null}
+                    {message.authorProfileId === null ? (
+                      <div className={cn("flex flex-col items-end", spacing)}>
+                        <div
                           className={cn(
-                            "size-7 shrink-0",
-                            startsGroup && "mt-0.5 rounded-full bg-muted"
+                            "[&_span]:!text-white w-fit max-w-[75%] whitespace-pre-wrap rounded-[1.25rem] bg-[#0b84fe] px-3.5 py-2 text-white",
+                            endsGroup && "rounded-br-md"
                           )}
-                        />
-                      )}
-                      <div className="flex min-w-0 max-w-[85%] flex-col items-start gap-1">
-                        {startsGroup ? (
-                          <div className="px-1 font-medium text-13 text-foreground">
-                            {author?.name ?? "Unavailable agent"}
-                          </div>
-                        ) : null}
-                        <div className="relative max-w-full rounded-2xl bg-muted px-4 py-2.5">
-                          <Message
-                            className="mr-0 ml-0 max-w-full items-start justify-start"
-                            from="assistant"
-                          >
-                            <MessageContent className="ml-0 w-full max-w-full gap-1 group-[.is-user]:ml-0">
-                              <MessageResponse components={markdownComponents}>
-                                {markMentions(message.content, handles)}
-                              </MessageResponse>
-                            </MessageContent>
-                          </Message>
-                          <MessageActions
-                            onReply={() => onOpenThread(message.id)}
+                        >
+                          <MentionText
+                            handles={handles}
+                            profiles={profiles}
                             text={message.content}
                           />
                         </div>
-                        <ThreadLink
-                          onClick={() => onOpenThread(message.id)}
-                          replies={message.threadReplies}
-                          replying={replyingThreads.has(message.id)}
-                        />
+                        {message.id === deliveredId && !run ? (
+                          <span className="mt-0.5 pr-1 text-muted-foreground text-xs">
+                            Delivered
+                          </span>
+                        ) : null}
                       </div>
-                    </div>
-                  )}
-                </Fragment>
-              );
-            })}
+                    ) : (
+                      <div
+                        className={cn("group flex items-end gap-2", spacing)}
+                      >
+                        {endsGroup && author ? (
+                          <ProfileAvatar
+                            className="outline-none"
+                            profile={author}
+                            size="sm"
+                          />
+                        ) : (
+                          <span className="size-7 shrink-0" />
+                        )}
+                        <div className="flex min-w-0 max-w-[75%] flex-col items-start gap-1">
+                          {startsGroup ? (
+                            <div className="px-3.5 text-muted-foreground text-xs">
+                              {author?.name ?? "Unavailable agent"}
+                            </div>
+                          ) : null}
+                          <div
+                            className={cn(
+                              "relative max-w-full rounded-[1.25rem] bg-muted px-3.5 py-2",
+                              endsGroup && "rounded-bl-md"
+                            )}
+                          >
+                            <Message
+                              className="mr-0 ml-0 max-w-full items-start justify-start"
+                              from="assistant"
+                            >
+                              <MessageContent className="ml-0 w-full max-w-full gap-1 group-[.is-user]:ml-0">
+                                <MessageResponse
+                                  components={markdownComponents}
+                                >
+                                  {markMentions(message.content, handles)}
+                                </MessageResponse>
+                              </MessageContent>
+                            </Message>
+                            <MessageActions
+                              onReply={() => onOpenThread(message.id)}
+                              text={message.content}
+                            />
+                          </div>
+                          <ThreadLink
+                            onClick={() => onOpenThread(message.id)}
+                            replies={message.threadReplies}
+                            replying={replyingThreads.has(message.id)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </Fragment>
+                );
+              }
+            )}
             {run ? (
-              <div className="mt-4 flex gap-2.5">
-                {speaker && !speakerContinues ? (
+              <div className="mt-3 flex items-end gap-2">
+                {speaker ? (
                   <ProfileAvatar
-                    className="mt-0.5 outline-none"
+                    className="outline-none"
                     profile={speaker}
                     size="sm"
                   />
@@ -384,19 +416,22 @@ export function GroupMessageList({
                 )}
                 <div className="flex flex-col items-start gap-1">
                   {speaker && !speakerContinues ? (
-                    <div className="px-1 font-medium text-13">
+                    <div className="px-3.5 text-muted-foreground text-xs">
                       {speaker.name}
                     </div>
                   ) : null}
-                  <div className="rounded-2xl bg-muted px-4 py-2.5">
-                    <ThinkingState
-                      className="text-sm"
-                      label={
-                        run.stopping
-                          ? "Stopping after this reply"
-                          : run.activity || "Working…"
-                      }
-                    />
+                  <div
+                    aria-label={run.stopping ? "Stopping" : "Typing"}
+                    className="flex h-9 items-center gap-1 rounded-[1.25rem] rounded-bl-md bg-muted px-4"
+                    role="status"
+                  >
+                    {[0, 1, 2].map((dot) => (
+                      <span
+                        className="size-2 animate-bounce rounded-full bg-muted-foreground/60"
+                        key={dot}
+                        style={{ animationDelay: `${dot * 150}ms` }}
+                      />
+                    ))}
                   </div>
                 </div>
               </div>
