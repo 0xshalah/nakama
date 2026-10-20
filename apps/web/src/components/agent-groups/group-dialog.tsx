@@ -100,19 +100,26 @@ function MemberPicker({
           />
         </div>
         {matches.length > 0 ? (
-          <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-xl border border-input p-1.5">
-            {matches.map((profile, index) => (
-              <button
-                className={`flex items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-muted ${index === 0 ? "bg-muted" : ""}`}
-                key={profile.id}
-                onClick={() => add(profile.id)}
-                type="button"
-              >
-                <ProfileAvatar profile={profile} size="sm" />
-                <span className="min-w-0 truncate text-sm">{profile.name}</span>
-              </button>
-            ))}
-          </div>
+          <>
+            <span className="font-medium text-muted-foreground text-xs">
+              Available agents
+            </span>
+            <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-xl border border-input p-1.5 md:max-h-72">
+              {matches.map((profile, index) => (
+                <button
+                  className={`flex items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-muted ${index === 0 ? "bg-muted" : ""}`}
+                  key={profile.id}
+                  onClick={() => add(profile.id)}
+                  type="button"
+                >
+                  <ProfileAvatar profile={profile} size="sm" />
+                  <span className="min-w-0 truncate text-sm">
+                    {profile.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
         ) : null}
       </div>
     </div>
@@ -227,12 +234,12 @@ export function GroupDialog({
       }}
       open
     >
-      <DialogContent>
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{group ? "Edit group" : "New group"}</DialogTitle>
         </DialogHeader>
         <form
-          className="flex flex-col gap-4"
+          className="grid gap-4 md:grid-cols-2 md:gap-x-6"
           id="group-form"
           onSubmit={(event) => {
             event.preventDefault();
@@ -247,67 +254,75 @@ export function GroupDialog({
             );
           }}
         >
-          <div className="flex items-center gap-2 rounded-xl border border-input p-1.5">
-            <PhotoPicker
-              hasImage={hasImage}
-              onChoose={(file) => void chooseImage(file)}
-              src={
-                preview ?? (hasImage && group ? groupAvatarUrl(group) : null)
-              }
-            />
-            <Input
-              aria-label="Group name"
-              autoFocus
-              className="h-10 border-0 bg-transparent text-base shadow-none focus-visible:ring-0 dark:bg-transparent"
-              maxLength={80}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Group name"
-              value={name}
-            />
-            {hasImage ? (
-              <Button
-                onClick={() => {
-                  setImage(group?.avatarVersion ? null : undefined);
-                  setPreview(null);
-                }}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                Remove
-              </Button>
+          <div className="flex min-w-0 flex-col gap-4 md:order-1">
+            <div className="flex items-center gap-2 rounded-xl border border-input p-1.5">
+              <PhotoPicker
+                hasImage={hasImage}
+                onChoose={(file) => void chooseImage(file)}
+                src={
+                  preview ?? (hasImage && group ? groupAvatarUrl(group) : null)
+                }
+              />
+              <Input
+                aria-label="Group name"
+                autoFocus
+                className="h-10 border-0 bg-transparent text-base shadow-none focus-visible:ring-0 dark:bg-transparent"
+                maxLength={80}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Group name"
+                value={name}
+              />
+              {hasImage ? (
+                <Button
+                  onClick={() => {
+                    setImage(group?.avatarVersion ? null : undefined);
+                    setPreview(null);
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+            {imageError ? (
+              <p className="text-destructive text-sm" role="alert">
+                {imageError}
+              </p>
             ) : null}
+            <div className="flex flex-col gap-2">
+              <label className="font-semibold text-sm" htmlFor="group-brief">
+                Brief
+              </label>
+              <Textarea
+                className="max-h-64 min-h-32 overflow-y-auto"
+                id="group-brief"
+                maxLength={4000}
+                onChange={(event) => setBrief(event.target.value)}
+                placeholder="What is this group for? Every agent reads it."
+                rows={3}
+                value={brief}
+              />
+            </div>
           </div>
-          {imageError ? (
-            <p className="text-destructive text-sm" role="alert">
-              {imageError}
-            </p>
-          ) : null}
-          <MemberPicker
-            memberIds={memberIds}
-            onAdd={addMember}
-            onRemove={removeMember}
-            profiles={profiles}
-          />
-          <div className="flex flex-col gap-2">
-            <label className="font-semibold text-sm" htmlFor="group-brief">
-              Brief
-            </label>
-            <Textarea
-              id="group-brief"
-              maxLength={4000}
-              onChange={(event) => setBrief(event.target.value)}
-              placeholder="What is this group for? Every agent reads it."
-              rows={3}
-              value={brief}
+          <div className="min-w-0 md:order-2">
+            <MemberPicker
+              memberIds={memberIds}
+              onAdd={addMember}
+              onRemove={removeMember}
+              profiles={profiles}
             />
           </div>
           {save.error ? (
-            <p className="text-destructive text-sm" role="alert">
+            <p
+              className="text-destructive text-sm md:order-3 md:col-span-2"
+              role="alert"
+            >
               {formatError(save.error)}
             </p>
           ) : null}
-          <DialogFooter>
+          <DialogFooter className="md:order-4 md:col-span-2">
             <Button onClick={onClose} type="button" variant="outline">
               Cancel
             </Button>

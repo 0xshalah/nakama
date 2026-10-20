@@ -1,5 +1,10 @@
-import type { ImageAttachment, OrgRole, ProfileSummary } from "@nakama/core";
-import { NakamaApiError } from "@nakama/core";
+import type {
+  DocumentAttachment,
+  ImageAttachment,
+  OrgRole,
+  ProfileSummary,
+} from "@nakama/core";
+import { NakamaApiError, resolveDocumentPartForProvider } from "@nakama/core";
 import {
   type AgentGroup,
   type AgentGroupMessage,
@@ -11,11 +16,15 @@ import {
   memberHandles,
   mentionedMemberIds,
 } from "@nakama/core/agent-groups";
-import { validateImageAttachments } from "@nakama/core/message-content";
+import {
+  validateDocumentAttachments,
+  validateImageAttachments,
+} from "@nakama/core/message-content";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
 import type { DatabaseAdapter } from "@nakama/db";
 import { failSubAgentResult } from "../tools/sub-agent-shared";
 import {
+  DOCUMENT_CONTEXT_CHARS,
   groupMembers,
   groupTask,
   threadTask,
@@ -29,6 +38,7 @@ import {
   deleteAgentGroup,
   deleteAgentGroupAvatar,
   deleteGroupSession,
+  type GroupDocument,
   getAgentGroup,
   getAgentGroupAvatar,
   getAgentGroupMessage,
@@ -311,16 +321,29 @@ export class AgentGroupService {
    * Opens a session with its first message and starts the reply run. The
    * session is returned at once; the run comes back as `run` for the caller.
    */
-  start(orgId: string, userId: string, groupId: string, content: string) {
+  start(
+    orgId: string,
+    userId: string,
+    groupId: string,
+    content: string,
+    documents: GroupDocument[] = []
+  ) {
     requireGroup(orgId, userId, groupId);
 
     const session = createGroupSession(
       orgId,
       groupId,
-      groupSessionTitle(content)
+      groupSessionTitle(content || (documents[0]?.filename ?? ""))
     );
 
-    const run = this.post(orgId, userId, groupId, session.id, content);
+    const run = this.post(
+      orgId,
+      userId,
+      groupId,
+      session.id,
+      content,
+      documents
+    );
 
     return { run, session: this.withActive(session) };
   }
@@ -370,13 +393,21 @@ export class AgentGroupService {
     userId: string,
     groupId: string,
     sessionId: string,
-    content: string
+    content: string,
+    documents: GroupDocument[] = []
   ): Promise<void> {
     const session = requireSession(orgId, userId, groupId, sessionId);
     const active = this.runs.get(sessionId);
 
     if (active) {
-      appendAgentGroupMessage(orgId, session, null, content);
+      appendAgentGroupMessage(
+        orgId,
+        session,
+        null,
+        content,
+        undefined,
+        documents
+      );
       active.inbox.push(content);
       // A new message outranks an earlier Stop.
       active.stopping = false;
@@ -401,7 +432,14 @@ export class AgentGroupService {
     this.runs.set(sessionId, run);
 
     try {
-      appendAgentGroupMessage(orgId, session, null, content);
+      appendAgentGroupMessage(
+        orgId,
+        session,
+        null,
+        content,
+        undefined,
+        documents
+      );
     } catch (error) {
       this.runs.delete(sessionId);
       throw error;
@@ -632,6 +670,36 @@ export class AgentGroupService {
       halt(run);
     }
   }
+}
+
+/**
+ * The text of attached documents, read before a message is saved so a bad file
+ * fails the send instead of an agent's turn.
+ */
+export async function readGroupDocuments(
+  documents: DocumentAttachment[]
+): Promise<GroupDocument[]> {
+  validateDocumentAttachments(documents);
+
+  return await Promise.all(
+    documents.map(async (document) => {
+      // A provider with no native documents always gets them as text.
+      const part = await resolveDocumentPartForProvider(
+        { ...document, type: "document" },
+        "openai_compatible"
+      );
+
+      return {
+        filename: document.filename.trim(),
+        text:
+          part.type === "text"
+            ? part.text
+                .replace(/^\[File: [^\n]*\]\n/, "")
+                .slice(0, DOCUMENT_CONTEXT_CHARS)
+            : "",
+      };
+    })
+  );
 }
 
 /**

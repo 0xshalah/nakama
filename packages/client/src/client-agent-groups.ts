@@ -7,7 +7,10 @@ import type {
   ListAgentGroupsResponse,
   ListRailPinsResponse,
 } from "@nakama/core/agent-groups";
-import type { ImageAttachment } from "@nakama/core/contract";
+import type {
+  DocumentAttachment,
+  ImageAttachment,
+} from "@nakama/core/contract";
 import { OrgMemoryClient } from "./client-org-memory";
 
 interface AgentGroupInput {
@@ -90,11 +93,12 @@ export class AgentGroupsClient extends OrgMemoryClient {
   /** Opens a session with its first message; the agents start replying. */
   async createAgentGroupSession(
     groupId: string,
-    content: string
+    content: string,
+    documents: DocumentAttachment[] = []
   ): Promise<AgentGroupSession> {
     return this.request<AgentGroupSession>(
       `${agentGroupPath(groupId)}/sessions`,
-      { body: JSON.stringify({ content }), method: "POST" }
+      { body: JSON.stringify({ content, documents }), method: "POST" }
     );
   }
 
@@ -130,12 +134,13 @@ export class AgentGroupsClient extends OrgMemoryClient {
   async sendAgentGroupMessage(
     groupId: string,
     sessionId: string,
-    content: string
+    content: string,
+    documents: DocumentAttachment[] = []
   ): Promise<void> {
     await this.request(
       `${agentGroupSessionPath(groupId, sessionId)}/messages`,
       {
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, documents }),
         method: "POST",
       }
     );

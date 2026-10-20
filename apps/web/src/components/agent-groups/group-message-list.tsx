@@ -4,7 +4,12 @@ import type {
   AgentGroupRun,
 } from "@nakama/core/agent-groups";
 import { cn } from "@nakama/ui/utils";
-import { Chat01Icon, CheckmarkCircle01Icon, Copy01Icon } from "hugeicons-react";
+import {
+  Chat01Icon,
+  CheckmarkCircle01Icon,
+  Copy01Icon,
+  File01Icon,
+} from "hugeicons-react";
 import {
   Fragment,
   useCallback,
@@ -337,11 +342,25 @@ export function GroupMessageList({
                             endsGroup && "rounded-br-md"
                           )}
                         >
-                          <MentionText
-                            handles={handles}
-                            profiles={profiles}
-                            text={message.content}
-                          />
+                          {message.files?.map((filename) => (
+                            <div
+                              className="flex items-center gap-1.5 font-medium text-sm"
+                              key={filename}
+                            >
+                              <File01Icon
+                                aria-hidden
+                                className="size-4 shrink-0"
+                              />
+                              <span className="truncate">{filename}</span>
+                            </div>
+                          ))}
+                          {message.content ? (
+                            <MentionText
+                              handles={handles}
+                              profiles={profiles}
+                              text={message.content}
+                            />
+                          ) : null}
                         </div>
                         {message.id === deliveredId && !run ? (
                           <span className="mt-0.5 pr-1 text-muted-foreground text-xs">

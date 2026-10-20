@@ -4,9 +4,18 @@ import {
   mentionRanges,
   mentionSuggestions,
 } from "@nakama/core/agent-groups";
+import type { DocumentAttachment } from "@nakama/core/contract";
+import { MAX_DOCUMENT_BYTES } from "@nakama/core/message-content";
 import { Button } from "@nakama/ui/button";
+import { toast } from "@nakama/ui/toast";
 import { cn } from "@nakama/ui/utils";
-import { ArrowUp02Icon, UserGroupIcon } from "hugeicons-react";
+import {
+  Add01Icon,
+  ArrowUp02Icon,
+  Cancel01Icon,
+  File01Icon,
+  UserGroupIcon,
+} from "hugeicons-react";
 import { useEffect, useRef, useState } from "react";
 import {
   PromptInput,
@@ -20,6 +29,10 @@ import {
 import { ChatSkillTokenOverlay } from "@/components/chat/chat-skill-token-overlay";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { findActiveSkillSlashRange } from "@/lib/chat-composer-skills";
+import {
+  DOCUMENT_ACCEPT,
+  filePartsToDocumentAttachments,
+} from "@/lib/chat-images";
 import {
   composerHitTargetClass,
   composerInputGroupClass,
@@ -48,12 +61,14 @@ function StopIcon() {
 }
 
 interface GroupComposerProps {
+  /** Shows the attach button; a thread has none. */
+  allowDocuments?: boolean;
   busy: boolean;
   handles: Map<string, string>;
   /** Text to start with, such as a message whose send failed. */
   initialInput?: string;
   members: ProfileSummary[];
-  onSend: (content: string) => Promise<void>;
+  onSend: (content: string, documents?: DocumentAttachment[]) => Promise<void>;
   onStop: () => void;
   /** Shown in the empty field; the group wording by default. */
   placeholder?: string;
@@ -73,6 +88,7 @@ export function GroupComposer(props: GroupComposerProps) {
 }
 
 function GroupComposerForm({
+  allowDocuments = false,
   busy,
   handles,
   members,
@@ -81,8 +97,9 @@ function GroupComposerForm({
   placeholder = "Message the group, @mention an agent or @all",
   stopping,
 }: GroupComposerProps) {
-  const { textInput } = usePromptInputController();
+  const { attachments, textInput } = usePromptInputController();
   const draft = textInput.value;
+  const canSend = Boolean(draft.trim()) || attachments.files.length > 0;
   // Read when a send fails, after the user may have typed something new.
   const draftRef = useRef(draft);
 
@@ -101,6 +118,15 @@ function GroupComposerForm({
     mention && handles.size > 0
       ? mentionSuggestions(mention.query, handles)
       : [];
+
+  const [active, setActive] = useState(0);
+  const activeIndex = Math.min(active, suggestions.length - 1);
+  const query = mention?.query;
+
+  // A new query starts the list from its top again.
+  useEffect(() => {
+    setActive(0);
+  }, [query]);
 
   const ranges = mentionRanges(draft, handles).map(
     ({ end, handle, start }) => ({ end, name: handle, start })
@@ -129,14 +155,17 @@ function GroupComposerForm({
           className="absolute bottom-full left-0 z-20 mb-2 flex min-w-56 flex-col rounded-xl border border-border bg-popover p-1 shadow-md"
           role="listbox"
         >
-          {suggestions.map((handle) => {
+          {suggestions.map((handle, index) => {
             const id = mentionRanges(`@${handle}`, handles)[0]?.id;
             const member = members.find((m) => m.id === id);
 
             return (
               <button
-                aria-selected={false}
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-muted"
+                aria-selected={index === activeIndex}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-muted",
+                  index === activeIndex && "bg-muted"
+                )}
                 key={handle}
                 onClick={() => insertMention(handle)}
                 onMouseDown={(event) => event.preventDefault()}
@@ -161,15 +190,51 @@ function GroupComposerForm({
           })}
         </div>
       ) : null}
+      {attachments.files.length > 0 ? (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {attachments.files.map((file) => (
+            <div
+              className="flex max-w-full items-center gap-2 rounded-lg border border-border bg-muted py-1.5 pr-1.5 pl-3"
+              key={file.id}
+            >
+              <File01Icon
+                aria-hidden
+                className="size-4 shrink-0 text-muted-foreground"
+              />
+              <span className="truncate font-medium text-xs">
+                {file.filename ?? "Document"}
+              </span>
+              <button
+                aria-label={`Remove ${file.filename ?? "document"}`}
+                className="rounded-md p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                onClick={() => attachments.remove(file.id)}
+                type="button"
+              >
+                <Cancel01Icon className="size-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <PromptInput
+        accept={allowDocuments ? DOCUMENT_ACCEPT : undefined}
         className={GROUP_SHELL_CLASS}
         inputGroupClassName={composerInputGroupClass}
+        maxFileSize={allowDocuments ? MAX_DOCUMENT_BYTES : undefined}
+        maxFiles={allowDocuments ? 5 : undefined}
+        multiple={allowDocuments}
+        onError={(attachmentError) => toast(attachmentError.message)}
         // Returning nothing lets PromptInput clear the field at once; a failed
         // send puts the text back unless something new was typed meanwhile.
-        onSubmit={({ text }) => {
+        onSubmit={({ files, text }) => {
           const content = text.trim();
+          const documents = filePartsToDocumentAttachments(files);
 
-          onSend(content).catch(() => {
+          if (!(content || documents.length > 0)) {
+            return;
+          }
+
+          onSend(content, documents).catch(() => {
             if (!draftRef.current.trim()) {
               textInput.setInput(content);
             }
@@ -194,11 +259,23 @@ function GroupComposerForm({
               maxLength={8000}
               onChange={(event) => setCaret(event.target.selectionStart)}
               onKeyDown={(event) => {
-                const [first] = suggestions;
+                const chosen = suggestions[activeIndex];
 
-                if (first && (event.key === "Tab" || event.key === "Enter")) {
+                if (!chosen) {
+                  return;
+                }
+
+                if (event.key === "Tab" || event.key === "Enter") {
                   event.preventDefault();
-                  insertMention(first);
+                  insertMention(chosen);
+                } else if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActive((activeIndex + 1) % suggestions.length);
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActive(
+                    (activeIndex - 1 + suggestions.length) % suggestions.length
+                  );
                 }
               }}
               onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
@@ -209,8 +286,21 @@ function GroupComposerForm({
           </div>
         </PromptInputBody>
         <PromptInputFooter className="w-auto shrink-0 flex-nowrap items-center justify-end gap-1.5 border-0 p-0">
+          {allowDocuments ? (
+            <Button
+              aria-label="Add document"
+              className="size-8 shrink-0 rounded-full"
+              onClick={attachments.openFileDialog}
+              size="icon-sm"
+              title="Add document"
+              type="button"
+              variant="ghost"
+            >
+              <Add01Icon className="size-4" />
+            </Button>
+          ) : null}
           {/* One button at a time: Stop while agents reply, Send once you type. */}
-          {busy && !draft.trim() ? (
+          {busy && !canSend ? (
             <Button
               aria-label="Stop after this reply"
               className={composerSubmitButtonClassName}
@@ -226,7 +316,7 @@ function GroupComposerForm({
             <PromptInputSubmit
               aria-label={busy ? "Add to the conversation" : "Send message"}
               className={composerSubmitButtonClassName}
-              disabled={!draft.trim()}
+              disabled={!canSend}
             >
               <ArrowUp02Icon className="size-4" />
             </PromptInputSubmit>
