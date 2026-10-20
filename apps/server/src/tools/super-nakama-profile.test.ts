@@ -426,6 +426,29 @@ describe("super nakama update_profile", () => {
     });
   });
 
+  test("update_profile can change only the model", async () => {
+    const captured: UpdateProfileRequest[] = [];
+
+    const updateProfile = getUpdateProfileTool({
+      async updateProfile(
+        _orgId: string,
+        _profileId: string,
+        request: UpdateProfileRequest
+      ): Promise<ProfileResponse> {
+        captured.push(request);
+
+        return profileResponse({ systemPrompt: "You are support." });
+      },
+    });
+
+    await updateProfile.run(
+      { model: "provider-a::model-a", profileId: "support-bot" },
+      { orgId: ORG_ID, sessionId: SESSION_ID }
+    );
+
+    expect(captured).toEqual([{ model: "provider-a::model-a" }]);
+  });
+
   test("rejects update_profile with neither systemPrompt nor soulFiles", async () => {
     let updateProfileCalled = false;
 
