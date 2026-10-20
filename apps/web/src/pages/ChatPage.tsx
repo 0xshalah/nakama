@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect } from "react";
-import { useParams } from "react-router-dom";
 import { useActiveChatProfileStore } from "@/context/active-chat-profile-store";
 import { useBtwChatStore } from "@/context/btw-chat-store";
 import { ChatPageContent } from "@/pages/chat/chat-page-content";
@@ -11,15 +10,8 @@ const BtwChatPanel = lazy(async () => ({
 
 export function ChatPage() {
   const state = useChatPage();
-  const { sessionId } = useParams();
   const openBtw = useBtwChatStore((store) => store.open);
   const btwOpen = useBtwChatStore((store) => store.chat !== null);
-
-  useEffect(() => {
-    if (sessionId) {
-      void import("@/components/chat/chat-message-list");
-    }
-  }, [sessionId]);
 
   useEffect(() => {
     const focusComposer = (event: KeyboardEvent) => {
