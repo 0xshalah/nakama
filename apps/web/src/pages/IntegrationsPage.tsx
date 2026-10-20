@@ -1,4 +1,5 @@
 import { Spinner } from "@nakama/ui/spinner";
+import { cn } from "@nakama/ui/utils";
 import {
   Link,
   Navigate,
@@ -102,7 +103,12 @@ export function IntegrationsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div
+      className={cn(
+        "mx-auto space-y-6",
+        onConnectors ? "min-w-0 max-w-4xl" : "max-w-3xl"
+      )}
+    >
       {onConnectors ? null : (
         <Link
           className="block w-fit text-muted-foreground text-sm hover:text-foreground"
