@@ -355,6 +355,7 @@ export function registerAgentGroupRoutes(
       const auth = requireOrgMemberFromContext(c);
       const orgId = requireActiveOrgIdFromContext(c);
       const groupId = c.req.param("groupId");
+
       const { content, documents } = await readJson(
         c.req.raw,
         groupMessageSchema
