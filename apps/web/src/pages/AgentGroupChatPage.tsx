@@ -294,6 +294,7 @@ function GroupDraft({
       content,
       documents
     );
+
     creating.current = request;
     setPending(message);
 
