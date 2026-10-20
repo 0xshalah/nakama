@@ -554,3 +554,43 @@ async function captureError(promise: Promise<unknown>): Promise<Error | null> {
     return error instanceof Error ? error : new Error(String(error));
   }
 }
+
+describe("super nakama create_group", () => {
+  test("creates the group for the signed-in user with the brief", async () => {
+    const calls: unknown[][] = [];
+    const tool = createSuperNakamaTools(
+      {} as ProfileService,
+      new SuperNakamaSessionState(),
+      undefined,
+      undefined,
+      {
+        createGroup: async (...args) => {
+          calls.push(args);
+
+          // SAFETY: only the fields the tool returns are read.
+          return { id: "g1" } as Awaited<
+            ReturnType<
+              NonNullable<
+                Parameters<typeof createSuperNakamaTools>[4]
+              >["createGroup"] & {}
+            >
+          >;
+        },
+      }
+    ).find((candidate) => candidate.name === "create_group");
+
+    const result = await tool?.run(
+      { brief: "Ship v2", memberIds: ["a", "b"], name: "Launch" },
+      { orgId: ORG_ID, userId: "u1" }
+    );
+
+    expect(calls).toEqual([[ORG_ID, "u1", "Launch", ["a", "b"], "Ship v2"]]);
+    expect(result).toMatchObject({ type: "group_created" });
+    await expect(
+      tool?.run(
+        { memberIds: ["a"], name: "Solo" },
+        { orgId: ORG_ID, userId: "u1" }
+      )
+    ).rejects.toThrow();
+  });
+});

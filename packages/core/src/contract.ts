@@ -2138,6 +2138,8 @@ export interface ProfileSummary {
   /** Whether this profile may create and execute automations. */
   automationsEnabled?: boolean;
   createdAt: string;
+  /** Whether a super agent may create agent groups. */
+  groupsEnabled?: boolean;
   hasAvatar: boolean;
   id: string;
   isDefault?: boolean;
@@ -2449,6 +2451,7 @@ export interface UpdateProfileRequest {
   /** Platform admins only: the agent runs as a process on the server host. */
   acpAgent?: AcpAgentConfig | null;
   automationsEnabled?: boolean;
+  groupsEnabled?: boolean;
   model?: string | null;
   name?: string;
   /** Owner or admin: false keeps the agent private to its owner. */

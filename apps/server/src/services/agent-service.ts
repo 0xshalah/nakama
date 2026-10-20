@@ -301,6 +301,7 @@ import { SUB_AGENT_TOOL_NAME } from "../tools/sub-agent-tool";
 import { createSuperNakamaTools } from "../tools/super-nakama-tools";
 import { createTodoTools } from "../tools/todo-tools";
 import { getAgentBrowserStatus } from "./agent-browser-service";
+import { AgentGroupService } from "./agent-group-service";
 import { AgentQuestionnaireState } from "./agent-questionnaire-state";
 import { AgentTodoState } from "./agent-todo-state";
 import {
@@ -557,6 +558,14 @@ export class AgentService {
       {
         assignSkill: (orgId, profileId, request, meta) =>
           this.assignSkill(orgId, profileId, request, meta),
+        createGroup: (orgId, userId, name, memberIds, brief) =>
+          new AgentGroupService(this.db, this).create(
+            orgId,
+            userId,
+            name,
+            memberIds,
+            brief
+          ),
         getModels: () => this.getModels(),
         listSkills: (orgId) => this.listSkills(orgId),
       }
@@ -5588,7 +5597,13 @@ export class AgentService {
     }
 
     if (profile.isSuper) {
-      resolved = [...resolved, ...this.superNakamaTools];
+      resolved = [
+        ...resolved,
+        ...this.superNakamaTools.filter(
+          (tool) =>
+            tool.name !== "create_group" || profile.groupsEnabled !== false
+        ),
+      ];
     }
 
     if (hasOwnTools) {

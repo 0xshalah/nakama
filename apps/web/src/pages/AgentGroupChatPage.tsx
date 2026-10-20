@@ -7,9 +7,11 @@ import {
   type AgentGroupSessionDetail,
   memberHandles,
 } from "@nakama/core/agent-groups";
+import { Button } from "@nakama/ui";
 import { Spinner } from "@nakama/ui/spinner";
 import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { MessageAdd01Icon, UserAdd01Icon } from "hugeicons-react";
 import { useMemo, useRef, useState } from "react";
 import {
   Link,
@@ -19,6 +21,7 @@ import {
 } from "react-router-dom";
 import { GroupAvatar } from "@/components/agent-groups/GroupAvatar";
 import { GroupComposer } from "@/components/agent-groups/group-composer";
+import { GroupDialog } from "@/components/agent-groups/group-dialog";
 import { GroupMessageList } from "@/components/agent-groups/group-message-list";
 import { GroupThreadPanel } from "@/components/agent-groups/group-thread-panel";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
@@ -139,7 +142,7 @@ function useMembers(group: AgentGroup, profiles: ProfileSummary[]) {
   return { handles: useMemo(() => memberHandles(members), [members]), members };
 }
 
-/** The group's name, its agents' avatars and their count. */
+/** The group's name, its agents' avatars and count, and the new chat and add agent buttons. */
 function GroupHeader({
   group,
   members,
@@ -147,8 +150,11 @@ function GroupHeader({
   group: AgentGroup;
   members: ProfileSummary[];
 }) {
+  const navigate = useNavigate();
+  const [adding, setAdding] = useState(false);
+
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-border border-b px-4 sm:px-6">
+    <header className="flex h-14 shrink-0 items-center gap-3 px-4 sm:px-6">
       <h1 className="truncate font-semibold text-lg tracking-tight">
         {group.name}
       </h1>
@@ -165,6 +171,28 @@ function GroupHeader({
       <span className="shrink-0 text-muted-foreground text-sm">
         {group.memberIds.length} agents
       </span>
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <Button
+          onClick={() => setAdding(true)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <UserAdd01Icon aria-hidden />
+          Add agent
+        </Button>
+        <Button
+          onClick={() => navigate(groupPath(group.id))}
+          size="sm"
+          type="button"
+        >
+          <MessageAdd01Icon aria-hidden />
+          New chat
+        </Button>
+      </div>
+      {adding ? (
+        <GroupDialog group={group} onClose={() => setAdding(false)} />
+      ) : null}
     </header>
   );
 }

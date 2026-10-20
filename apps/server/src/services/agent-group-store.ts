@@ -231,6 +231,7 @@ export function createAgentGroup(
     brief,
     createdAt: new Date().toISOString(),
     id: randomUUID(),
+    lastMessage: null,
     memberIds,
     name,
   };

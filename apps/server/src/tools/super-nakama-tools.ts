@@ -13,6 +13,7 @@ import {
   type ToolDefinition,
   type UpdateProfileRequest,
 } from "@nakama/core";
+import type { AgentGroup } from "@nakama/core/agent-groups";
 import { z } from "zod";
 import { modelSupportsVision } from "../providers/models";
 import {
@@ -93,6 +94,13 @@ export function createSuperNakamaTools(
       request: AssignSkillRequest,
       meta: ProfileChangeMeta
     ) => Promise<ProfileResponse>;
+    createGroup?: (
+      orgId: string,
+      userId: string,
+      name: string,
+      memberIds: string[],
+      brief: string
+    ) => Promise<AgentGroup>;
     getModels?: () => Promise<ModelsResponse>;
     listSkills?: (orgId: string) => Promise<ListSkillsResponse>;
   } = {}
@@ -323,6 +331,56 @@ export function createSuperNakamaTools(
           ...result,
           type: "profile_created" as const,
         };
+      },
+    },
+    {
+      description:
+        "Create a group chat where the user talks with several agents at once. Get the member ids from list_profiles. Confirm the name, members, and brief with the user before calling this. The brief is shared with every agent in the group as context.",
+      name: "create_group",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          brief: {
+            description:
+              "What the group is for. Every agent in the group reads it.",
+            type: "string",
+          },
+          memberIds: {
+            description: "Profile ids of the agents to add. 2 to 12.",
+            items: { type: "string" },
+            type: "array",
+          },
+          name: { description: "Group name.", type: "string" },
+        },
+        required: ["name", "memberIds"],
+        type: "object",
+      },
+      async run(input, context: ToolContext) {
+        const orgId = requireOrgId(context);
+        const userId = context.userId?.trim();
+
+        if (!(userId && services.createGroup)) {
+          throw new Error("Creating groups needs a signed-in user.");
+        }
+
+        const parsed = z
+          .object({
+            brief: z.string().trim().max(4000).default(""),
+            memberIds: z.array(z.string().min(1)).min(2).max(12),
+            name: z.string().trim().min(1).max(80),
+          })
+          .strict()
+          .parse(input);
+
+        const group = await services.createGroup(
+          orgId,
+          userId,
+          parsed.name,
+          parsed.memberIds,
+          parsed.brief
+        );
+
+        return { group, type: "group_created" as const };
       },
     },
     {
