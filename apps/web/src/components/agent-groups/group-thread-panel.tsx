@@ -7,6 +7,7 @@ import { toast } from "@nakama/ui/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GroupComposer } from "@/components/agent-groups/group-composer";
+import { GroupMessageArtifacts } from "@/components/agent-groups/group-message-list";
 import {
   Message,
   MessageContent,
@@ -131,6 +132,11 @@ export function GroupThreadPanel({
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="font-medium text-13">{agent?.name}</span>
                 <MessageResponse>{message.content}</MessageResponse>
+                <GroupMessageArtifacts
+                  content={message.content}
+                  messageId={message.id}
+                  profileId={message.authorProfileId}
+                />
               </div>
             </div>
           )

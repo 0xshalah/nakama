@@ -19,6 +19,9 @@ const DOCUMENT_GUIDANCE =
 const CHAT_STYLE =
   'Text like a real person on iMessage: casual, lowercase is fine, contractions, plain words, a little personality. Be warm: sound glad to hear from the user, like a close friend who cares how it goes. Notice how they feel, cheer their wins, and be kind when they are stuck or stressed. Usually one or two short sentences, like a text, not a paragraph. Answer first, skip formal greetings and sign-offs, and never open with filler like "Great question". No headings, lists, bold or markdown. A friendly emoji like 😄 or 🙌 is welcome often, one at most per message. Match the user\'s tone and energy. If the question is vague, ask one quick question back. Do not repeat what others already said. Write more only if the user asks for detail.';
 
+const ARTIFACT_GUIDANCE =
+  "For a file the user asked for (page, report, deck, code, data), save it with save_artifact and name its path, like artifacts/report.html, in your short reply. Never paste the file into the chat.";
+
 /** The group's members the user can still reach, in member order. */
 export function groupMembers(
   group: AgentGroup,
@@ -54,6 +57,7 @@ export function groupTask(
     `This is a chat message, not a report. ${CHAT_STYLE} Do not prefix it with your name.`,
     "To hand the conversation to another agent, mention their @handle. Mention nobody when you are done or the user should answer.",
     "When the user writes @all, every agent answers in turn; you never use @all yourself.",
+    ARTIFACT_GUIDANCE,
   ].join("\n");
 }
 
@@ -117,6 +121,7 @@ export function threadTask(
     ...briefSection(group),
     "The user opened a private thread with you on one of your messages. The group chat up to that message, then the thread, are under Context, newest last.",
     `Reply to the user in the thread as yourself, without prefixing your name. ${CHAT_STYLE} Other agents do not see the thread, so do not mention them.`,
+    ARTIFACT_GUIDANCE,
   ].join("\n");
 }
 

@@ -5,6 +5,7 @@ import type {
 } from "@nakama/core/agent-groups";
 import { cn } from "@nakama/ui/utils";
 import {
+  ArrowUpRight01Icon,
   Chat01Icon,
   CheckmarkCircle01Icon,
   Copy01Icon,
@@ -33,7 +34,14 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
+import { useArtifactAttachmentPreviewPanel } from "@/components/chat/use-artifact-attachment-preview-panel";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { useArtifactsExist } from "@/hooks/use-resource-mutations";
+import {
+  type ChatArtifactRef,
+  extractArtifactPathsFromText,
+  inferArtifactMimeType,
+} from "@/lib/chat-artifacts";
 
 /** Same threshold as the agent chat list. */
 const AT_BOTTOM_PX = 80;
@@ -112,6 +120,98 @@ function ThreadLink({
   );
 }
 
+/** One line: file icon, name and type, as its own bubble. */
+function ArtifactPill({
+  artifact,
+  id,
+  profileId,
+}: {
+  artifact: ChatArtifactRef;
+  id: string;
+  profileId: string;
+}) {
+  const { openPanel } = useArtifactAttachmentPreviewPanel({
+    artifact,
+    id,
+    profileId: artifact.ownerProfileId ?? profileId,
+  });
+
+  const type = artifact.filename.split(".").pop()?.toUpperCase();
+
+  return (
+    <button
+      className="inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-sm shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={openPanel}
+      type="button"
+    >
+      <File01Icon
+        aria-hidden
+        className="size-4 shrink-0 text-muted-foreground"
+      />
+      <span className="truncate font-medium">{artifact.filename}</span>
+      {type ? (
+        <span className="shrink-0 text-muted-foreground text-xs">{type}</span>
+      ) : null}
+      <ArrowUpRight01Icon
+        aria-hidden
+        className="size-3.5 shrink-0 text-muted-foreground"
+      />
+    </button>
+  );
+}
+
+/** Chips for the `artifacts/...` files an agent names in its message. */
+export function GroupMessageArtifacts({
+  content,
+  messageId,
+  profileId,
+}: {
+  content: string;
+  messageId: number;
+  profileId: string;
+}) {
+  const artifacts = useMemo<ChatArtifactRef[]>(
+    () =>
+      extractArtifactPathsFromText(content).map(({ ownerProfileId, path }) => {
+        const filename = path.split("/").pop() ?? path;
+
+        return {
+          filename,
+          mimeType: inferArtifactMimeType(filename),
+          ownerProfileId,
+          path,
+          savedAt: "",
+          sizeBytes: 0,
+        };
+      }),
+    [content]
+  );
+
+  const exists = useArtifactsExist(artifacts, profileId, messageId > 0);
+  const live = artifacts.filter((_, index) => exists[index]);
+
+  if (live.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      {live.map((artifact) => {
+        const id = `group:${messageId}:${artifact.ownerProfileId ?? profileId}:${artifact.path}`;
+
+        return (
+          <ArtifactPill
+            artifact={artifact}
+            id={id}
+            key={id}
+            profileId={profileId}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 /** A time label shows between messages this far apart. */
 const TIME_GAP_MS = 30 * 60 * 1000;
 
@@ -164,6 +264,47 @@ function messageKeys(messages: AgentGroupMessage[]): string[] {
     message.authorProfileId === null
       ? `user-${userCount++}`
       : `message-${message.id}`
+  );
+}
+
+/** The typing dots of the agent that is writing. */
+function TypingRow({
+  speaker,
+  speakerContinues,
+  stopping,
+}: {
+  speaker: ProfileSummary | undefined;
+  speakerContinues: boolean;
+  stopping: boolean;
+}) {
+  return (
+    <div className="mt-3 flex items-end gap-2">
+      {speaker ? (
+        <ProfileAvatar className="outline-none" profile={speaker} size="sm" />
+      ) : (
+        <span className="size-7 shrink-0" />
+      )}
+      <div className="flex flex-col items-start gap-1">
+        {speaker && !speakerContinues ? (
+          <div className="px-3.5 text-muted-foreground text-xs">
+            {speaker.name}
+          </div>
+        ) : null}
+        <div
+          aria-label={stopping ? "Stopping" : "Typing"}
+          className="flex h-9 items-center gap-1 rounded-[1.25rem] rounded-bl-md bg-muted px-4"
+          role="status"
+        >
+          {[0, 1, 2].map((dot) => (
+            <span
+              className="size-2 animate-bounce rounded-full bg-muted-foreground/60"
+              key={dot}
+              style={{ animationDelay: `${dot * 150}ms` }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -410,6 +551,13 @@ export function GroupMessageList({
                               text={message.content}
                             />
                           </div>
+                          {message.authorProfileId ? (
+                            <GroupMessageArtifacts
+                              content={message.content}
+                              messageId={message.id}
+                              profileId={message.authorProfileId}
+                            />
+                          ) : null}
                           <ThreadLink
                             onClick={() => onOpenThread(message.id)}
                             replies={message.threadReplies}
@@ -423,37 +571,11 @@ export function GroupMessageList({
               }
             )}
             {run ? (
-              <div className="mt-3 flex items-end gap-2">
-                {speaker ? (
-                  <ProfileAvatar
-                    className="outline-none"
-                    profile={speaker}
-                    size="sm"
-                  />
-                ) : (
-                  <span className="size-7 shrink-0" />
-                )}
-                <div className="flex flex-col items-start gap-1">
-                  {speaker && !speakerContinues ? (
-                    <div className="px-3.5 text-muted-foreground text-xs">
-                      {speaker.name}
-                    </div>
-                  ) : null}
-                  <div
-                    aria-label={run.stopping ? "Stopping" : "Typing"}
-                    className="flex h-9 items-center gap-1 rounded-[1.25rem] rounded-bl-md bg-muted px-4"
-                    role="status"
-                  >
-                    {[0, 1, 2].map((dot) => (
-                      <span
-                        className="size-2 animate-bounce rounded-full bg-muted-foreground/60"
-                        key={dot}
-                        style={{ animationDelay: `${dot * 150}ms` }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <TypingRow
+                speaker={speaker}
+                speakerContinues={speakerContinues}
+                stopping={run.stopping}
+              />
             ) : null}
           </div>
         </div>
