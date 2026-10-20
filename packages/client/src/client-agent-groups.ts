@@ -4,6 +4,7 @@ import type {
   AgentGroupSessionDetail,
   ListAgentGroupSessionsResponse,
   ListAgentGroupsResponse,
+  ListRailPinsResponse,
 } from "@nakama/core/agent-groups";
 import type { ImageAttachment } from "@nakama/core/contract";
 import { OrgMemoryClient } from "./client-org-memory";
@@ -21,7 +22,7 @@ function agentGroupSessionPath(groupId: string, sessionId: string): string {
   return `${agentGroupPath(groupId)}/sessions/${encodeURIComponent(sessionId)}`;
 }
 
-/** Agent groups, their photo, and their sessions. */
+/** Agent groups, their sessions, and the agents and groups pinned in the rail. */
 export class AgentGroupsClient extends OrgMemoryClient {
   async listAgentGroups(): Promise<ListAgentGroupsResponse> {
     return this.request<ListAgentGroupsResponse>("/v1/agent-groups");
@@ -136,6 +137,16 @@ export class AgentGroupsClient extends OrgMemoryClient {
   ): Promise<void> {
     await this.request(`${agentGroupSessionPath(groupId, sessionId)}/stop`, {
       method: "POST",
+    });
+  }
+
+  async listRailPins(): Promise<ListRailPinsResponse> {
+    return this.request<ListRailPinsResponse>("/v1/rail-pins");
+  }
+
+  async setRailPin(itemId: string, pinned: boolean): Promise<void> {
+    await this.request(`/v1/rail-pins/${encodeURIComponent(itemId)}`, {
+      method: pinned ? "PUT" : "DELETE",
     });
   }
 }

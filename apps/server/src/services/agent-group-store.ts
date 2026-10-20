@@ -27,7 +27,9 @@ const SCHEMA = `PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
   CREATE INDEX IF NOT EXISTS messages_session ON messages (session_id, id);
   CREATE TABLE IF NOT EXISTS group_avatars (
     group_id TEXT PRIMARY KEY REFERENCES groups (id) ON DELETE CASCADE,
-    media_type TEXT NOT NULL, bytes BLOB NOT NULL, updated_at TEXT NOT NULL);`;
+    media_type TEXT NOT NULL, bytes BLOB NOT NULL, updated_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS rail_pins (
+    user_id TEXT NOT NULL, item_id TEXT NOT NULL, PRIMARY KEY (user_id, item_id));`;
 
 const GROUP_COLUMNS = `g.id, g.name, g.member_ids, g.created_at, a.updated_at AS avatar_version
   FROM groups g LEFT JOIN group_avatars a ON a.group_id = g.id`;
@@ -218,13 +220,18 @@ export function deleteAgentGroup(
   ownerId: string,
   groupId: string
 ): boolean {
-  return withGroupDb(
-    orgId,
-    (db) =>
+  return withGroupDb(orgId, (db) => {
+    const removed =
       db
         .query("DELETE FROM groups WHERE id = ? AND owner_user_id = ?")
-        .run(groupId, ownerId).changes > 0
-  );
+        .run(groupId, ownerId).changes > 0;
+
+    if (removed) {
+      db.query("DELETE FROM rail_pins WHERE item_id = ?").run(groupId);
+    }
+
+    return removed;
+  });
 }
 
 /** Replaces the group's image; false when the group is not this owner's. */
@@ -281,6 +288,37 @@ export function deleteAgentGroupAvatar(
             (SELECT id FROM groups WHERE id = ? AND owner_user_id = ?)`
         )
         .run(groupId, ownerId).changes > 0
+  );
+}
+
+export function listRailPins(orgId: string, userId: string): string[] {
+  return withGroupDb(orgId, (db) =>
+    db
+      .query<{ item_id: string }, [string]>(
+        // A re-pin replaces the row, so the newest rowid is the latest pin.
+        "SELECT item_id FROM rail_pins WHERE user_id = ? ORDER BY rowid DESC"
+      )
+      .all(userId)
+      .map((row) => row.item_id)
+  );
+}
+
+export function setRailPin(
+  orgId: string,
+  userId: string,
+  itemId: string,
+  pinned: boolean
+): void {
+  withGroupDb(orgId, (db) =>
+    pinned
+      ? db
+          .query(
+            "INSERT OR REPLACE INTO rail_pins (user_id, item_id) VALUES (?, ?)"
+          )
+          .run(userId, itemId)
+      : db
+          .query("DELETE FROM rail_pins WHERE user_id = ? AND item_id = ?")
+          .run(userId, itemId)
   );
 }
 

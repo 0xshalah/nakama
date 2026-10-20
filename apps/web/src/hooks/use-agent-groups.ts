@@ -65,6 +65,28 @@ export function useDeleteGroupSession(groupId: string) {
   });
 }
 
+/** Agent and group ids pinned to the top of the rail, latest pin first. */
+export function useRailPinsQuery() {
+  return useQuery({
+    queryFn: async () => (await client.listRailPins()).itemIds,
+    queryKey: queryKeys.railPins,
+  });
+}
+
+export function useToggleRailPin() {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: ({ itemId, pinned }: { itemId: string; pinned: boolean }) =>
+      client.setRailPin(itemId, pinned),
+    onError: (error) => toast(formatError(error)),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.railPins }),
+  });
+
+  return mutation.mutate;
+}
+
 export interface GroupDraft {
   /** A new image, `null` to remove the current one, `undefined` to keep it. */
   image?: ImageAttachment | null;
@@ -101,7 +123,11 @@ export function useDeleteGroup() {
   return useMutation({
     mutationFn: (groupId: string) => client.deleteAgentGroup(groupId),
     onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.agentGroups.all }),
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.agentGroups.all }),
+        // The server drops the deleted group's rail pin too.
+        queryClient.invalidateQueries({ queryKey: queryKeys.railPins }),
+      ]),
   });
 }
 

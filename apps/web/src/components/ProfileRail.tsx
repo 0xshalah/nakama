@@ -9,6 +9,8 @@ import { cn } from "@nakama/ui/utils";
 import {
   Delete02Icon,
   PencilEdit02Icon,
+  PinIcon,
+  PinOffIcon,
   PlusSignSquareIcon,
 } from "hugeicons-react";
 import { useEffect, useRef, useState } from "react";
@@ -23,7 +25,12 @@ import { SidebarUserMenu } from "@/components/SidebarUserMenu";
 import { useActiveChatProfile } from "@/context/use-active-chat-profile";
 import { useAuth } from "@/context/use-auth";
 import { useTheme } from "@/context/use-theme";
-import { useAgentGroupsQuery, useDeleteGroup } from "@/hooks/use-agent-groups";
+import {
+  useAgentGroupsQuery,
+  useDeleteGroup,
+  useRailPinsQuery,
+  useToggleRailPin,
+} from "@/hooks/use-agent-groups";
 import { useSelectProfile } from "@/hooks/use-select-profile";
 import {
   groupPath,
@@ -60,7 +67,9 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
   const location = useLocation();
   const [createOpen, setCreateOpen] = useState(false);
   const { data: groups = [] } = useAgentGroupsQuery();
-  // A long press opens a group's menu, and lifting the finger then fires a
+  const { data: pins = [] } = useRailPinsQuery();
+  const togglePin = useToggleRailPin();
+  // A long press opens the pin menu, and lifting the finger then fires a
   // click; for a moment that click neither navigates nor closes the menu.
   const menuOpenedAt = useRef(0);
   const [menuItemId, setMenuItemId] = useState<string | null>(null);
@@ -88,25 +97,45 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
     selectProfile(profileId);
   }
 
+  /** Same rule as the server: admins edit any agent, members their own. */
+  function canEditAgent(profile: ProfileSummary): boolean {
+    return (
+      user?.isPlatformAdmin === true ||
+      activeOrg?.role === "admin" ||
+      (!profile.isSuper && profile.ownerUserId === user?.id)
+    );
+  }
+
   function openGroup(groupId: string) {
     onNavigate?.();
     navigate(groupPath(groupId));
   }
 
-  const agentItems: RailItem[] = orderedProfiles.map((profile) => ({
-    id: profile.id,
-    kind: "agent",
-    profile,
-  }));
+  const allItems: RailItem[] = [
+    ...orderedProfiles.map((profile) => ({
+      id: profile.id,
+      kind: "agent" as const,
+      profile,
+    })),
+    ...groups.map((group) => ({ group, id: group.id, kind: "group" as const })),
+  ];
 
-  const groupItems: RailItem[] = groups.map((group) => ({
-    group,
-    id: group.id,
-    kind: "group",
-  }));
+  // Pinned agents and groups lead the rail, latest pin first.
+  const pinnedItems = pins.flatMap(
+    (id) => allItems.find((item) => item.id === id) ?? []
+  );
+
+  const agentItems = allItems.filter(
+    (item) => item.kind === "agent" && !pins.includes(item.id)
+  );
+
+  const groupItems = allItems.filter(
+    (item) => item.kind === "group" && !pins.includes(item.id)
+  );
 
   function renderItem(item: RailItem) {
     const name = item.kind === "agent" ? item.profile.name : item.group.name;
+    const pinned = pins.includes(item.id);
 
     // An open group takes the highlight from the chat agent.
     const active =
@@ -169,20 +198,7 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
       </button>
     );
 
-    const tooltip = (
-      <Tooltip key={item.id}>
-        <TooltipTrigger render={trigger} />
-        <TooltipContent side="right" sideOffset={8}>
-          {name}
-        </TooltipContent>
-      </Tooltip>
-    );
-
-    if (item.kind === "agent") {
-      return tooltip;
-    }
-
-    // Right-click, or a long press on touch, opens the group's menu.
+    // Right-click, or a long press on touch, opens the item's menu.
     return (
       <ContextMenu.Root
         key={item.id}
@@ -197,26 +213,51 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
         open={menuItemId === item.id}
       >
         <ContextMenu.Trigger className="flex shrink-0">
-          {tooltip}
+          <Tooltip>
+            <TooltipTrigger render={trigger} />
+            <TooltipContent side="right" sideOffset={8}>
+              {name}
+            </TooltipContent>
+          </Tooltip>
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
           <ContextMenu.Positioner className="isolate z-50 outline-none">
             <ContextMenu.Popup className="z-50 min-w-36 rounded-lg bg-popover p-1 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10">
-              <DropdownMenuItem onClick={() => openGroup(item.id)}>
-                <PlusSignSquareIcon />
-                New chat
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setEditingGroup(item.group)}>
-                <PencilEdit02Icon />
-                Edit group
-              </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => setDeletingGroup(item.group)}
-                variant="destructive"
+                onClick={() => togglePin({ itemId: item.id, pinned: !pinned })}
               >
-                <Delete02Icon />
-                Delete group
+                {pinned ? <PinOffIcon /> : <PinIcon />}
+                {pinned ? "Unpin" : "Pin to top"}
               </DropdownMenuItem>
+              {item.kind === "group" ? (
+                <>
+                  <DropdownMenuItem onClick={() => openGroup(item.id)}>
+                    <PlusSignSquareIcon />
+                    New chat
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setEditingGroup(item.group)}>
+                    <PencilEdit02Icon />
+                    Edit group
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setDeletingGroup(item.group)}
+                    variant="destructive"
+                  >
+                    <Delete02Icon />
+                    Delete group
+                  </DropdownMenuItem>
+                </>
+              ) : canEditAgent(item.profile) ? (
+                <DropdownMenuItem
+                  onClick={() => {
+                    onNavigate?.();
+                    navigate(profilePath(item.id));
+                  }}
+                >
+                  <PencilEdit02Icon />
+                  Edit agent
+                </DropdownMenuItem>
+              ) : null}
             </ContextMenu.Popup>
           </ContextMenu.Positioner>
         </ContextMenu.Portal>
@@ -243,6 +284,10 @@ export function ProfileRail({ onNavigate }: { onNavigate?: () => void } = {}) {
       </a>
 
       <div className="no-scrollbar flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1 py-1">
+        {pinnedItems.map(renderItem)}
+        {pinnedItems.length > 0 && agentItems.length + groupItems.length > 0 ? (
+          <RailDivider />
+        ) : null}
         {agentItems.map(renderItem)}
         {groupItems.length > 0 && agentItems.length > 0 ? (
           <RailDivider />
