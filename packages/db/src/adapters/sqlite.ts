@@ -199,10 +199,12 @@ interface ToolRow {
 interface SessionRow {
   agent_questionnaire: string | null;
   agent_todos: string;
+  branch_message_index: number | null;
   channel: string;
   created_at: string;
   id: string;
   model: string | null;
+  parent_session_id: string | null;
   pinned: number;
   profile_id: string;
   title: string | null;
@@ -234,14 +236,17 @@ interface AttachmentRow {
 }
 
 interface SessionSummaryRow {
+  branch_message_index: number | null;
   channel: string;
   created_at: string;
   first_user_payload: string | null;
   id: string;
   message_count: number;
+  parent_session_id: string | null;
   pinned: number;
   position: number;
   profile_id: string;
+  sort_position: number | null;
   title: string | null;
   updated_at: string;
 }
@@ -1240,6 +1245,32 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   const deleteProfileStmt = db.prepare("DELETE FROM profiles WHERE id = ?");
 
+  const promoteProfileStmt = db.prepare(
+    "UPDATE profiles SET is_default = 1, updated_at = ? WHERE id = ? AND org_id = ?"
+  );
+
+  const deleteProfileAndPromoteDefaultTx = db.transaction(
+    (id: string, orgId: string, successorId?: string) => {
+      if (getProfileForOrgStmt.get(id, orgId)?.is_default && !successorId) {
+        throw new Error("Default profile changed during deletion.");
+      }
+
+      const deleted = deleteProfileForOrgStmt.run(id, orgId).changes > 0;
+
+      if (
+        deleted &&
+        successorId &&
+        !getDefaultProfileForOrgStmt.get(orgId) &&
+        promoteProfileStmt.run(new Date().toISOString(), successorId, orgId)
+          .changes !== 1
+      ) {
+        throw new Error("Successor profile not found.");
+      }
+
+      return deleted;
+    }
+  );
+
   const deleteProfileForOrgStmt = db.prepare(
     "DELETE FROM profiles WHERE id = ? AND org_id = ?"
   );
@@ -1326,8 +1357,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
 
   // org_id follows the profile's org. The profile move path keeps it in sync.
   const upsertSessionStmt = db.prepare(`
-    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned)
-    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+    INSERT INTO sessions (id, profile_id, channel, created_at, updated_at, app_user_id, user_id, model, org_id, pinned, parent_session_id, branch_message_index)
+    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       profile_id = excluded.profile_id,
       channel = excluded.channel,
@@ -1352,6 +1383,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
   const updateSessionPinnedStmt = db.prepare(
     "UPDATE sessions SET pinned = ? WHERE id = ? AND app_user_id IS NULL"
   );
+
+  const updateSessionParentStmt = db.prepare(
+    "UPDATE sessions SET parent_session_id = ? WHERE id = ? AND app_user_id IS NULL"
+  );
+
+  const setSessionOrderStmt = db.prepare(`
+    INSERT INTO session_user_order (session_id, user_id, sort_position)
+    VALUES (?, ?, ?)
+    ON CONFLICT(session_id, user_id) DO UPDATE SET sort_position = excluded.sort_position
+  `);
 
   const updateSessionTitleStmt = db.prepare(`
     UPDATE sessions SET title = ? WHERE id = ? AND app_user_id IS NULL AND title IS NULL
@@ -1520,12 +1561,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         s.created_at,
         s.title,
         s.pinned,
+        s.parent_session_id,
+        s.branch_message_index,
+        o.sort_position,
         COUNT(m.id) AS message_count,
         max(
           COALESCE(MAX(m.created_at), s.created_at),
           COALESCE(s.updated_at, s.created_at)
         ) AS updated_at
       FROM sessions s
+      LEFT JOIN session_user_order o ON o.session_id = s.id AND o.user_id = ?12
       LEFT JOIN session_messages m ON m.session_id = s.id
       WHERE s.profile_id = ?1
         AND s.channel IN (SELECT value FROM json_each(?2))
@@ -4745,6 +4790,10 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       return result.changes > 0;
     },
 
+    async deleteProfileAndPromoteDefault(id, orgId, successorId) {
+      return deleteProfileAndPromoteDefaultTx.immediate(id, orgId, successorId);
+    },
+
     async deleteProfileForOrg(id, orgId) {
       const result = deleteProfileForOrgStmt.run(id, orgId);
 
@@ -4752,9 +4801,16 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     },
 
     async deleteSession(id) {
-      const result = deleteSessionStmt.run(id);
+      return db.transaction(() => {
+        db.prepare(
+          "UPDATE sessions SET parent_session_id = NULL WHERE parent_session_id = ?"
+        ).run(id);
+        db.prepare("DELETE FROM session_user_order WHERE session_id = ?").run(
+          id
+        );
 
-      return result.changes > 0;
+        return deleteSessionStmt.run(id).changes > 0;
+      })();
     },
 
     async deleteSkill(id) {
@@ -5666,7 +5722,8 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
           sessionId ?? null,
           query ? likeContains(query) : null,
           userId ?? null,
-          JSON.stringify(sharedChannels ?? [])
+          JSON.stringify(sharedChannels ?? []),
+          userId ?? null
         )
         .map((row) => toSessionSummaryRecord(row));
     },
@@ -5925,6 +5982,13 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
     async setPendingMfaSecret(id, pendingTotpSecretEnc, updatedAt) {
       setPendingMfaSecretStmt.run(pendingTotpSecretEnc, updatedAt, id);
     },
+    async setSessionOrder(userId, sessionIds) {
+      db.transaction(() => {
+        for (const [index, sessionId] of sessionIds.entries()) {
+          setSessionOrderStmt.run(sessionId, userId, index);
+        }
+      })();
+    },
 
     async setUserContext(orgId, userId, content, _updatedAt) {
       setUserContextStmt.run(content, orgId, userId);
@@ -6036,6 +6100,11 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
       const result = updateSessionModelStmt.run(model, sessionId);
 
       return result.changes > 0;
+    },
+    async updateSessionParent(sessionId, parentSessionId) {
+      return (
+        updateSessionParentStmt.run(parentSessionId, sessionId).changes > 0
+      );
     },
     async updateSessionPinned(sessionId, pinned) {
       const result = updateSessionPinnedStmt.run(pinned ? 1 : 0, sessionId);
@@ -6257,7 +6326,9 @@ function createSqliteDatabaseAdapter(db: Database): DatabaseAdapter {
         record.userId ?? null,
         record.model,
         orgId,
-        record.pinned ? 1 : 0
+        record.pinned ? 1 : 0,
+        record.parentSessionId ?? null,
+        record.branchMessageIndex ?? null
       );
     },
     async upsertSkill(record) {
@@ -6755,10 +6826,12 @@ function toSessionRecord(row: SessionRow): StoredSessionRecord {
   return {
     agentQuestionnaire: parseAgentQuestionnaire(row.agent_questionnaire),
     agentTodos: parseAgentTodos(row.agent_todos),
+    branchMessageIndex: row.branch_message_index,
     channel: row.channel,
     createdAt: row.created_at,
     id: row.id,
     model: row.model ?? null,
+    parentSessionId: row.parent_session_id,
     pinned: row.pinned === 1,
     profileId: row.profile_id,
     title: row.title ?? null,
@@ -6828,14 +6901,17 @@ function toSessionSummaryRecord(
   row: SessionSummaryRow
 ): StoredSessionSummaryRecord {
   return {
+    branchMessageIndex: row.branch_message_index,
     channel: row.channel,
     createdAt: row.created_at,
     id: row.id,
     messageCount: row.message_count,
+    parentSessionId: row.parent_session_id,
     pinned: row.pinned === 1,
     position: row.position,
     preview: previewFromFirstUserPayload(row.first_user_payload),
     profileId: row.profile_id,
+    sortPosition: row.sort_position,
     title: row.title ?? null,
     updatedAt: row.updated_at,
   };

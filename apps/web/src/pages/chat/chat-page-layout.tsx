@@ -7,16 +7,39 @@ import { welcomeAnimationKey } from "@/pages/chat/chat-page.shared";
 
 /**
  * Applied straight to the column rather than as an overlay child, so nothing
- * has to be lifted out of the way with z-index. The gradient is opaque, so the
- * result is identical.
+ * has to be lifted out of the way with z-index. It follows the app theme: a
+ * pale indigo glow in light mode, the near-black one in dark mode.
  */
 const COGNITO_SURFACE =
-  "radial-gradient(125% 125% at 50% 100%, #000000 40%, #010133 100%)";
+  "bg-[radial-gradient(125%_125%_at_50%_100%,#ffffff_40%,#dfe3ff_100%)] dark:bg-[radial-gradient(125%_125%_at_50%_100%,#000000_40%,#010133_100%)]";
 
 /** Size of one dither pixel, in CSS pixels. */
 const DITHER_CELL_PX = 4;
 
 const DITHER_FRAME_MS = 1000 / 20;
+
+/**
+ * The canvas is drawn at a higher opacity than the idle pattern needs, so a
+ * ripple can be brighter than the background. Idle pixels use a low alpha to
+ * keep the old look.
+ */
+const DITHER_BASE_ALPHA = 32;
+
+const RIPPLE_ALPHA = 255;
+
+const RIPPLE_MS = 5000;
+
+const RIPPLE_MAX = 6;
+
+/** Clicks on these elements do their own job and do not touch the water. */
+const RIPPLE_IGNORE =
+  "button, a, input, textarea, select, label, [contenteditable='true'], [role='menu'], [role='listbox'], [role='dialog']";
+
+interface Ripple {
+  start: number;
+  x: number;
+  y: number;
+}
 
 /** Normalised 8x8 Bayer thresholds, the same ordered dither as the logo. */
 function bayerThresholds(): number[] {
@@ -55,6 +78,33 @@ function ditherTone(x: number, y: number, aspect: number, t: number): number {
   return Math.min(tone, 1) * 0.55 * Math.max(0, 1 - edge * 1.1);
 }
 
+/** Signed wave height at a point: rings that spread out and fade from each click. */
+function rippleWave(
+  x: number,
+  y: number,
+  aspect: number,
+  t: number,
+  ripples: Ripple[]
+): number {
+  let wave = 0;
+
+  for (const ripple of ripples) {
+    const age = (t - ripple.start) / RIPPLE_MS;
+
+    if (age < 0 || age >= 1) {
+      continue;
+    }
+
+    const distance = Math.hypot((x - ripple.x) * aspect, y - ripple.y);
+    // Ease out, so the rings slow down as they spread, like real water.
+    const phase = distance - (1 - (1 - age) ** 2) * 0.55;
+    const envelope = Math.exp(-(phase * phase) / 0.006);
+    wave += Math.cos(phase * 60) * envelope * (1 - age) ** 2;
+  }
+
+  return wave;
+}
+
 function ChatDitherBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -68,25 +118,72 @@ function ChatDitherBackground() {
 
     const thresholds = bayerThresholds();
     let image = ctx.createImageData(1, 1);
+    let rippleImage = ctx.createImageData(1, 1);
+    let ripples: Ripple[] = [];
+    // The ripple is painted in a second colour, so it needs its own layer.
+    const rippleLayer = document.createElement("canvas");
+    const rippleCtx = rippleLayer.getContext("2d");
 
     const draw = (time: number) => {
       const { width, height, data } = image;
+      const rippleData = rippleImage.data;
       const aspect = width / height;
+      ripples = ripples.filter((ripple) => time - ripple.start < RIPPLE_MS);
 
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
-          const tone = ditherTone(x / width, y / height, aspect, time);
-          const on = tone > thresholds[(y % 8) * 8 + (x % 8)];
-          data[(y * width + x) * 4 + 3] = on ? 255 : 0;
+          const u = x / width;
+          const v = y / height;
+          const i = (y * width + x) * 4 + 3;
+          const threshold = thresholds[(y % 8) * 8 + (x % 8)];
+
+          const wave =
+            ripples.length > 0 ? rippleWave(u, v, aspect, time, ripples) : 0;
+
+          // The wave also bends the pattern under it, like light through water.
+          const tone = ditherTone(
+            u + wave * 0.025,
+            v + wave * 0.025,
+            aspect,
+            time
+          );
+
+          // The ripple only moves water that is already there: where the
+          // background has no shape, the rings fade out, so they follow its
+          // outline instead of drawing a full circle.
+          const surface = Math.min(1, tone * 3);
+          const ripple = wave * surface;
+          // One pattern, not two: crests raise the tone and troughs cut holes
+          // in it, and lit pixels near a crest take the primary colour.
+          const on = tone + ripple * 0.5 > threshold;
+          const glow = Math.min(1, Math.max(0, ripple));
+          const lit = on && glow > 0.15;
+
+          data[i] = on && !lit ? DITHER_BASE_ALPHA : 0;
+          rippleData[i] = lit ? RIPPLE_ALPHA * glow : 0;
         }
       }
+
+      const style = getComputedStyle(canvas);
 
       ctx.globalCompositeOperation = "copy";
       ctx.putImageData(image, 0, 0);
       // Recolour the mask with the theme text colour, whatever format it is in.
       ctx.globalCompositeOperation = "source-in";
-      ctx.fillStyle = getComputedStyle(canvas).color;
+      ctx.fillStyle = style.color;
       ctx.fillRect(0, 0, width, height);
+
+      if (!(rippleCtx && ripples.length > 0)) {
+        return;
+      }
+
+      rippleCtx.globalCompositeOperation = "copy";
+      rippleCtx.putImageData(rippleImage, 0, 0);
+      rippleCtx.globalCompositeOperation = "source-in";
+      rippleCtx.fillStyle = style.getPropertyValue("--primary").trim();
+      rippleCtx.fillRect(0, 0, width, height);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.drawImage(rippleLayer, 0, 0);
     };
 
     const resize = () => {
@@ -98,7 +195,10 @@ function ChatDitherBackground() {
         1,
         Math.ceil(canvas.clientHeight / DITHER_CELL_PX)
       );
+      rippleLayer.width = canvas.width;
+      rippleLayer.height = canvas.height;
       image = ctx.createImageData(canvas.width, canvas.height);
+      rippleImage = ctx.createImageData(canvas.width, canvas.height);
       draw(performance.now());
     };
 
@@ -114,7 +214,8 @@ function ChatDitherBackground() {
     let last = 0;
 
     const tick = (time: number) => {
-      if (time - last >= DITHER_FRAME_MS) {
+      // Full frame rate while a ripple moves, so the rings do not stutter.
+      if (ripples.length > 0 || time - last >= DITHER_FRAME_MS) {
         last = time;
         draw(time);
       }
@@ -124,16 +225,40 @@ function ChatDitherBackground() {
 
     frame = requestAnimationFrame(tick);
 
+    const surface = canvas.parentElement;
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest(RIPPLE_IGNORE)
+      ) {
+        return;
+      }
+
+      const rect = canvas.getBoundingClientRect();
+      ripples = [
+        ...ripples.slice(-(RIPPLE_MAX - 1)),
+        {
+          start: performance.now(),
+          x: (event.clientX - rect.left) / rect.width,
+          y: (event.clientY - rect.top) / rect.height,
+        },
+      ];
+    };
+
+    surface?.addEventListener("pointerdown", onPointerDown);
+
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      surface?.removeEventListener("pointerdown", onPointerDown);
     };
   }, []);
 
   return (
     <canvas
       aria-hidden
-      className="pointer-events-none absolute inset-0 -z-10 size-full text-foreground opacity-[0.03] [image-rendering:pixelated] dark:opacity-[0.04]"
+      className="pointer-events-none absolute inset-0 -z-10 size-full text-foreground opacity-[0.24] [image-rendering:pixelated] dark:opacity-[0.32]"
       ref={canvasRef}
     />
   );
@@ -153,7 +278,7 @@ export function ChatPageColumn({
   return (
     <div
       className={cn(
-        cognito && "dark",
+        cognito && COGNITO_SURFACE,
         // `relative` so a page-level control can pin itself to this column's
         // top-right corner, which is the top-right of the screen area.
         "relative isolate flex min-h-0 min-w-0 flex-col transition-[width,opacity,padding] duration-200 ease-out motion-reduce:transition-none",
@@ -165,10 +290,6 @@ export function ChatPageColumn({
           "max-sm:pointer-events-none max-sm:w-0 max-sm:flex-none max-sm:overflow-hidden max-sm:px-0 max-sm:opacity-0",
         centered && "justify-center"
       )}
-      // `dark` is a plain class here, not html.dark, so it re-declares the
-      // colour tokens for this subtree only. Without it a light theme would
-      // paint dark text onto the near-black gradient.
-      style={cognito ? { background: COGNITO_SURFACE } : undefined}
     >
       {centered && !cognito && <ChatDitherBackground />}
       {children}

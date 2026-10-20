@@ -7,7 +7,7 @@ import {
   ArrowRight01Icon,
   Search01Icon,
 } from "hugeicons-react";
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import {
   Link,
   Outlet,
@@ -20,6 +20,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { MobileNavDrawer } from "@/components/MobileNavDrawer";
 import { ProfileRail } from "@/components/ProfileRail";
 import { RouteBoundary } from "@/components/RouteBoundary";
+import { useBtwChatStore } from "@/context/btw-chat-store";
 import { useAppContext } from "@/context/use-app-context";
 import {
   useAgentGroupQuery,
@@ -39,10 +40,18 @@ import {
   pageIdFromPath,
   pluginIdFromPath,
   SIDEBAR_PAGE_IDS,
+  sidebarPageId,
 } from "@/lib/navigation";
+
+const BtwChatHost = lazy(() =>
+  import("@/components/chat/btw-chat").then((module) => ({
+    default: module.BtwChatHost,
+  }))
+);
 
 export function Layout() {
   const shell = useAppShell();
+  const btwOpen = useBtwChatStore((store) => store.chat !== null);
 
   return (
     <TooltipProvider delay={0}>
@@ -79,6 +88,11 @@ export function Layout() {
         </div>
       </div>
       <CommandPalette />
+      {btwOpen ? (
+        <Suspense fallback={null}>
+          <BtwChatHost />
+        </Suspense>
+      ) : null}
     </TooltipProvider>
   );
 }
@@ -184,7 +198,7 @@ function useAppShell() {
       (page === "chat" ? chatTitle : undefined) ||
       groupTitle ||
       (activePlugin?.label ??
-        findNavItem(page)?.label ??
+        findNavItem(sidebarPageId(page))?.label ??
         activePluginId ??
         undefined),
     page,
@@ -229,7 +243,7 @@ function AppShellHeader({
   const hideTitle = page === "soul";
 
   const showCustomizeBack =
-    page !== "notifications" && !SIDEBAR_PAGE_IDS.includes(page);
+    page !== "notifications" && !SIDEBAR_PAGE_IDS.includes(sidebarPageId(page));
 
   // SAFETY: PageId is a string union; the lookup falls back when the key is absent.
   const backLabel =
