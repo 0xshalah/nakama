@@ -35,12 +35,11 @@ import {
 } from "../shared";
 
 /** The upstream reason inside a stream `error` payload, when it names one. */
-function readStreamErrorMessage(error: unknown): string {
-  if (typeof error === "string") {
-    return error.trim();
-  }
+function readStreamErrorMessage(error: ProviderJsonRecord | string): string {
+  const reason =
+    readProviderString(error) ?? readProviderString(readRecord(error).message);
 
-  return readProviderString(readRecord(error).message)?.trim() ?? "";
+  return reason?.trim() ?? "";
 }
 
 export interface OpenAICompatibleProviderOptions {
@@ -445,7 +444,7 @@ async function streamChatCompletion(options: {
   const ended = await readSseEvents(response.body, ({ data, event }) => {
     // SAFETY: The upstream payload is validated or constructed by the provider adapter before this conversion.
     const payload = JSON.parse(data) as {
-      error?: unknown;
+      error?: ProviderJsonRecord | string;
       usage?: ProviderJsonRecord;
       choices?: Array<{
         delta?: {
@@ -460,7 +459,7 @@ async function streamChatCompletion(options: {
     };
 
     if (options.netra && (event === "error" || payload.error)) {
-      const detail = readStreamErrorMessage(payload.error);
+      const detail = payload.error ? readStreamErrorMessage(payload.error) : "";
 
       throw new Error(
         `${options.label} stream failed after it started${detail ? `: ${detail}` : "."}`
