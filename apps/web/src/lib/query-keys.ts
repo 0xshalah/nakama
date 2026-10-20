@@ -9,6 +9,14 @@ export const queryKeys = {
   agentBrowser: {
     settings: ["agentBrowser", "settings"] as const,
   },
+  agentGroups: {
+    all: ["agentGroups"] as const,
+    detail: (groupId: string) => ["agentGroups", groupId] as const,
+    session: (groupId: string, sessionId: string) =>
+      ["agentGroups", groupId, "sessions", sessionId] as const,
+    sessions: (groupId: string) =>
+      ["agentGroups", groupId, "sessions"] as const,
+  },
   artifacts: {
     profile: (profileId: string) => ["artifacts", profileId] as const,
     shareStatus: (profileId: string, path: string) =>

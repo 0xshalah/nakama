@@ -22,6 +22,10 @@ import { ProfileRail } from "@/components/ProfileRail";
 import { RouteBoundary } from "@/components/RouteBoundary";
 import { useBtwChatStore } from "@/context/btw-chat-store";
 import { useAppContext } from "@/context/use-app-context";
+import {
+  useAgentGroupQuery,
+  useGroupSessionsQuery,
+} from "@/hooks/use-agent-groups";
 import { useOrgPlugins } from "@/hooks/use-plugins";
 import {
   useHistorySessionsQuery,
@@ -30,6 +34,7 @@ import {
 import {
   enabledPluginNavEntries,
   findNavItem,
+  groupRouteFromPath,
   PAGE_PATHS,
   type PageId,
   pageIdFromPath,
@@ -66,7 +71,9 @@ export function Layout() {
             <AppShellHeader
               hideDesktop={
                 shell.pathname === PAGE_PATHS.profiles ||
-                shell.pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`)
+                shell.pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`) ||
+                // A group chat takes the full desktop column, like agent chat.
+                groupRouteFromPath(shell.pathname) !== null
               }
               label={shell.headerLabel}
               page={shell.page}
@@ -159,6 +166,19 @@ function useAppShell() {
 
   const chatTitle = (listedChat ?? unlistedChat)?.title?.trim();
 
+  // On a phone the header names the group chat: its session, else the group.
+  const groupRoute = groupRouteFromPath(location.pathname);
+  const { data: group } = useAgentGroupQuery(groupRoute?.groupId ?? "");
+
+  const { data: groupSessions } = useGroupSessionsQuery(
+    groupRoute?.groupId ?? ""
+  );
+
+  const groupTitle = groupRoute?.sessionId
+    ? groupSessions?.find((session) => session.id === groupRoute.sessionId)
+        ?.title
+    : group?.name;
+
   const { data: orgPlugins = [] } = useOrgPlugins();
 
   const pluginNav = useMemo(
@@ -176,6 +196,7 @@ function useAppShell() {
     error,
     headerLabel:
       (page === "chat" ? chatTitle : undefined) ||
+      groupTitle ||
       (activePlugin?.label ??
         findNavItem(sidebarPageId(page))?.label ??
         activePluginId ??
@@ -191,6 +212,7 @@ function isFlushContentPage(page: PageId, pathname: string): boolean {
     page === "automations" ||
     page === "files" ||
     page === "plugins" ||
+    pathname.startsWith(`${PAGE_PATHS.groups}/`) ||
     pathname.startsWith(`${PAGE_PATHS.profiles}/skills/`) ||
     pathname.startsWith(`${PAGE_PATHS.soul}/playground/`)
   );
