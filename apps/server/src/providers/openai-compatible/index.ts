@@ -34,6 +34,15 @@ import {
   readSseEvents,
 } from "../shared";
 
+/** The upstream reason inside a stream `error` payload, when it names one. */
+function readStreamErrorMessage(error: unknown): string {
+  if (typeof error === "string") {
+    return error.trim();
+  }
+
+  return readProviderString(readRecord(error).message)?.trim() ?? "";
+}
+
 export interface OpenAICompatibleProviderOptions {
   apiKey: string;
   baseUrl: string;
@@ -451,7 +460,11 @@ async function streamChatCompletion(options: {
     };
 
     if (options.netra && (event === "error" || payload.error)) {
-      throw new Error(`${options.label} stream failed after it started.`);
+      const detail = readStreamErrorMessage(payload.error);
+
+      throw new Error(
+        `${options.label} stream failed after it started${detail ? `: ${detail}` : "."}`
+      );
     }
 
     usage = extractOpenAITokenUsage(payload.usage) ?? usage;
