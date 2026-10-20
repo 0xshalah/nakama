@@ -79,6 +79,8 @@ const MAX_TOOL_ITERATIONS = 100;
 
 const MAX_TURN_OUTPUT_TOKENS = 200_000;
 
+const MAX_OPEN_TODO_NUDGES = 2;
+
 const EMPTY_REPLY_NUDGE =
   "Reply to the user now with a final answer based on the work so far.";
 
@@ -737,6 +739,8 @@ async function runConversation(
   let producedTokens = 0;
   let stoppedReply = "";
   let finalReplyOnly = false;
+  let openTodoNudges = 0;
+  let openTodosReminder: string | null = null;
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     signal?.throwIfAborted();
@@ -752,9 +756,14 @@ async function runConversation(
         ? toLlmToolDefinitions(iterationTools)
         : undefined;
 
-    const iterationPrompt = finalReplyOnly
+    let iterationPrompt = finalReplyOnly
       ? `${systemPrompt}\n\n${EMPTY_REPLY_NUDGE}`
       : systemPrompt;
+
+    if (openTodosReminder) {
+      iterationPrompt = `${iterationPrompt}\n\n${openTodosReminder}`;
+      openTodosReminder = null;
+    }
 
     const reservedTokens =
       estimateHistoryTokens(
@@ -882,6 +891,19 @@ async function runConversation(
     );
 
     if (!enableToolLoop || result.toolCalls.length === 0) {
+      if (
+        enableToolLoop &&
+        openTodoNudges < MAX_OPEN_TODO_NUDGES &&
+        producedTokens < MAX_TURN_OUTPUT_TOKENS
+      ) {
+        openTodosReminder = (await toolContext?.openTodosReminder?.()) ?? null;
+
+        if (openTodosReminder) {
+          openTodoNudges += 1;
+          continue;
+        }
+      }
+
       return result.content;
     }
 

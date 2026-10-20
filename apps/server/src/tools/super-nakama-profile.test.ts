@@ -443,7 +443,9 @@ describe("super nakama update_profile", () => {
       )
     );
 
-    expect(error?.message).toBe("Provide systemPrompt and/or soulFiles.");
+    expect(error?.message).toBe(
+      "Provide systemPrompt, soulFiles, and/or model."
+    );
     expect(updateProfileCalled).toBe(false);
   });
 

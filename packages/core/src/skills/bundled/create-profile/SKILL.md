@@ -45,7 +45,7 @@ Every agent gets a human first name, so the user feels they work with a teammate
 - Put the role in `SOUL.md` ("Maya is the user's brand strategist") and in how you introduce the agent to the user: "Maya — brand strategist". The profile name itself is only the first name.
 - For a team, give each agent a different first letter and mix voices and backgrounds, so the group feels like real people.
 - Use these names from the first time you suggest a team, in suggestions, question cards, drafts, and the final summary. Do not suggest job-title names and rename later. In a card, write "Maya — brand strategist".
-- Make the voice in `SOUL.md` and `STYLE.md` sound like that person, with a short personal way of speaking.
+- Make the voice in `SOUL.md` and `STYLE.md` sound like that person: warm, friendly, first person, plain words, with a short personal way of speaking, like a helpful teammate and not a formal assistant.
 - Check `list_profiles` first. Never reuse an existing name.
 - If the user dislikes a name, offer two other first names.
 

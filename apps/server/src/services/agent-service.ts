@@ -232,6 +232,7 @@ import {
   type StoredSessionRecord,
   type StoredSessionSummaryRecord,
   type StoredToolRecord,
+  SUPER_NAKAMA_TEAM_RULES,
   SUPER_NAKAMA_TOOL_AUTHORING_RULES,
 } from "@nakama/db";
 import { z } from "zod";
@@ -5694,7 +5695,7 @@ export class AgentService {
     );
 
     const resolvedSystemPrompt = profile.isSuper
-      ? `${systemPrompt.trim()}\n\n${SUPER_NAKAMA_TOOL_AUTHORING_RULES}`
+      ? `${systemPrompt.trim()}\n\n${SUPER_NAKAMA_TOOL_AUTHORING_RULES}\n\n${SUPER_NAKAMA_TEAM_RULES}`
       : systemPrompt;
 
     // A cognito session has nothing stored to load. On a model change it is
@@ -5775,6 +5776,13 @@ export class AgentService {
       loadAttachment,
       onSkillCatalogChange: () => {
         this.sessions.delete(sessionId);
+      },
+      openTodosReminder: async () => {
+        const plan = await this.agentTodoState.formatForPrompt(sessionId);
+
+        return plan
+          ? `${plan}\n\nYour task plan still has open todos. Continue the work with tools, or set each remaining todo to completed or cancelled with todo_write before you give the final reply.`
+          : null;
       },
       orgId,
       orgRole: orgRole ?? undefined,

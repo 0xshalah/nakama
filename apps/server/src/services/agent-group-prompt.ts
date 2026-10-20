@@ -10,7 +10,7 @@ const CONTEXT_MESSAGES = 40;
 const CONTEXT_CHARS = 24_000;
 
 const CHAT_STYLE =
-  "Write like a person in a group chat: 1-3 short sentences, no headings, lists or bold. Do not repeat what others already said. Write more only if the user asks for detail.";
+  "Write like a friendly teammate in a group chat: warm, first-person, plain words, a touch of personality. Use 2-4 short sentences, no headings, lists or bold. When it fits, greet the user, say what you can do for them, and invite their next step. Do not repeat what others already said. Write more only if the user asks for detail.";
 
 /** The group's members the user can still reach, in member order. */
 export function groupMembers(
