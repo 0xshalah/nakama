@@ -558,8 +558,11 @@ async function captureError(promise: Promise<unknown>): Promise<Error | null> {
 describe("super nakama create_group", () => {
   test("creates the group for the signed-in user with the brief", async () => {
     const calls: unknown[][] = [];
+
+    // SAFETY: create_group never touches the profile service.
+    const profileService = {} as ProfileService;
     const tool = createSuperNakamaTools(
-      {} as ProfileService,
+      profileService,
       new SuperNakamaSessionState(),
       undefined,
       undefined,
