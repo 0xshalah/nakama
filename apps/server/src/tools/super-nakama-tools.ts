@@ -288,7 +288,8 @@ export function createSuperNakamaTools(
             type: ["string", "null"],
           },
           name: {
-            description: "Display name for the profile.",
+            description:
+              "Display name for the profile: a human first name such as Maya or Theo, never a job title. Put the role in the soul files.",
             type: "string",
           },
           soulFiles: {

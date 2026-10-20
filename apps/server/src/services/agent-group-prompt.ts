@@ -9,6 +9,9 @@ const CONTEXT_MESSAGES = 40;
 
 const CONTEXT_CHARS = 24_000;
 
+const CHAT_STYLE =
+  "Write like a person in a group chat: 1-3 short sentences, no headings, lists or bold. Do not repeat what others already said. Write more only if the user asks for detail.";
+
 /** The group's members the user can still reach, in member order. */
 export function groupMembers(
   group: AgentGroup,
@@ -41,7 +44,7 @@ export function groupTask(
     `You are ${speaker.name} (@${handleOf(handles, speaker.id)}) in the group chat "${group.name}" with the user and these agents: ${roster}.`,
     ...briefSection(group),
     "The conversation so far is under Context, newest last. Reply to it as yourself.",
-    "This is a chat message, not a report: keep it conversational and do not prefix it with your name.",
+    `This is a chat message, not a report. ${CHAT_STYLE} Do not prefix it with your name.`,
     "To hand the conversation to another agent, mention their @handle. Mention nobody when you are done or the user should answer.",
     "When the user writes @all, every agent answers in turn; you never use @all yourself.",
   ].join("\n");
@@ -90,7 +93,7 @@ export function threadTask(
     `You are ${speaker.name} (@${handleOf(handles, speaker.id)}) in the group chat "${group.name}".`,
     ...briefSection(group),
     "The user opened a private thread with you on one of your messages. The group chat up to that message, then the thread, are under Context, newest last.",
-    "Reply to the user in the thread as yourself, in a conversational way, without prefixing your name. Other agents do not see the thread, so do not mention them.",
+    `Reply to the user in the thread as yourself, without prefixing your name. ${CHAT_STYLE} Other agents do not see the thread, so do not mention them.`,
   ].join("\n");
 }
 
