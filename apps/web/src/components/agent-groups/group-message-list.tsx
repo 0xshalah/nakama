@@ -42,17 +42,18 @@ function AgentName({ profile }: { profile?: ProfileSummary }) {
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
+  async function copy() {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
   return (
     <div className="flex items-center gap-1 pt-1 opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 group-active:opacity-100">
       <button
         aria-label={copied ? "Copied" : "Copy response"}
         className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        onClick={() =>
-          void navigator.clipboard.writeText(text).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          })
-        }
+        onClick={copy}
         title={copied ? "Copied" : "Copy response"}
         type="button"
       >
@@ -63,6 +64,20 @@ function CopyButton({ text }: { text: string }) {
         )}
       </button>
     </div>
+  );
+}
+
+/**
+ * A sent message first carries a temporary id, then the server's. Keying user
+ * messages by their order keeps the swap from remounting (and flashing) them.
+ */
+function messageKeys(messages: AgentGroupMessage[]): string[] {
+  let userCount = 0;
+
+  return messages.map((message) =>
+    message.authorProfileId === null
+      ? `user-${userCount++}`
+      : `message-${message.id}`
   );
 }
 
@@ -113,14 +128,14 @@ export function GroupMessageList({
     return () => observer.disconnect();
   }, [pin]);
 
-  // Sending a message always brings the reader back down to it.
+  // Sending a message always brings the reader back down to it; the scroll
+  // event then marks the list as at the bottom.
   const lastIsUser = messages.at(-1)?.authorProfileId === null;
   const lastId = messages.at(-1)?.id;
 
   useEffect(() => {
     if (lastIsUser && lastId !== undefined) {
       stickRef.current = true;
-      setIsAtBottom(true);
       pin("auto");
     }
   }, [lastId, lastIsUser, pin]);
@@ -138,6 +153,7 @@ export function GroupMessageList({
   );
 
   const speaker = profiles.find((p) => p.id === run?.speakerProfileId);
+  const keys = messageKeys(messages);
 
   return (
     <ConversationStickinessProvider value={stickiness}>
@@ -160,13 +176,13 @@ export function GroupMessageList({
           ref={scrollRef}
         >
           <div className="flex flex-col gap-6 px-4 py-4" ref={contentRef}>
-            {messages.map((message) => {
+            {messages.map((message, index) => {
               if (message.authorProfileId === null) {
                 return (
                   <Message
                     className="mr-0 ml-auto min-w-0 max-w-full items-end justify-end overflow-visible"
                     from="user"
-                    key={message.id}
+                    key={keys[index]}
                   >
                     <MessageContent className="ml-auto min-w-0 max-w-full overflow-visible group-[.is-user]:ml-auto">
                       <p className="whitespace-pre-wrap">
@@ -184,7 +200,7 @@ export function GroupMessageList({
               return (
                 <div
                   className="group mr-auto ml-0 flex w-full max-w-full flex-col items-start justify-start gap-2"
-                  key={message.id}
+                  key={keys[index]}
                 >
                   <AgentName
                     profile={profiles.find(
