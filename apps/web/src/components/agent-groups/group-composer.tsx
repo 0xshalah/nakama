@@ -7,7 +7,7 @@ import {
 import { Button } from "@nakama/ui/button";
 import { cn } from "@nakama/ui/utils";
 import { ArrowUp02Icon, UserGroupIcon } from "hugeicons-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   PromptInput,
   PromptInputBody,
@@ -23,12 +23,15 @@ import { findActiveSkillSlashRange } from "@/lib/chat-composer-skills";
 import {
   composerHitTargetClass,
   composerInputGroupClass,
-  composerShellClass,
 } from "@/lib/chat-stream";
 
 // The same textarea, send button and stop icon as the agent chat composer.
 const FULL_TEXTAREA_CLASS =
   "max-h-36 min-h-9 px-1 py-1 text-base leading-relaxed placeholder:text-muted-foreground sm:min-h-8 sm:text-sm";
+
+// One row: the field on the left, stop and send on the right.
+const GROUP_SHELL_CLASS =
+  "[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:flex-row [&_[data-slot=input-group]]:items-center [&_[data-slot=input-group]]:gap-2 [&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:border [&_[data-slot=input-group]]:border-border [&_[data-slot=input-group]]:py-2 [&_[data-slot=input-group]]:pr-2 [&_[data-slot=input-group]]:pl-4 [&_[data-slot=input-group]]:shadow-xs [&_[data-slot=input-group]]:transition-[box-shadow,border-color]";
 
 const composerSubmitButtonClassName = cn(
   composerHitTargetClass,
@@ -52,6 +55,8 @@ interface GroupComposerProps {
   members: ProfileSummary[];
   onSend: (content: string) => Promise<void>;
   onStop: () => void;
+  /** Shown in the empty field; the group wording by default. */
+  placeholder?: string;
   stopping: boolean;
 }
 
@@ -73,19 +78,29 @@ function GroupComposerForm({
   members,
   onSend,
   onStop,
+  placeholder = "Message the group, @mention an agent or @all",
   stopping,
 }: GroupComposerProps) {
   const { textInput } = usePromptInputController();
   const draft = textInput.value;
   // Read when a send fails, after the user may have typed something new.
   const draftRef = useRef(draft);
-  draftRef.current = draft;
+
+  useEffect(() => {
+    draftRef.current = draft;
+  });
+
   const [caret, setCaret] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const mention = findActiveSkillSlashRange(draft, caret, "@");
-  const suggestions = mention ? mentionSuggestions(mention.query, handles) : [];
+
+  // A thread is with one agent, so it has nobody to mention.
+  const suggestions =
+    mention && handles.size > 0
+      ? mentionSuggestions(mention.query, handles)
+      : [];
 
   const ranges = mentionRanges(draft, handles).map(
     ({ end, handle, start }) => ({ end, name: handle, start })
@@ -147,7 +162,7 @@ function GroupComposerForm({
         </div>
       ) : null}
       <PromptInput
-        className={composerShellClass}
+        className={GROUP_SHELL_CLASS}
         inputGroupClassName={composerInputGroupClass}
         // Returning nothing lets PromptInput clear the field at once; a failed
         // send puts the text back unless something new was typed meanwhile.
@@ -160,19 +175,22 @@ function GroupComposerForm({
             }
           });
         }}
-        rimActive={busy}
       >
         <PromptInputBody>
           <div className="relative min-w-0 flex-1">
             <ChatSkillTokenOverlay
               className={FULL_TEXTAREA_CLASS}
+              flat
               ranges={ranges}
               scrollTop={scrollTop}
               value={draft}
             />
             <PromptInputTextarea
               aria-label="Message"
-              className={FULL_TEXTAREA_CLASS}
+              className={cn(
+                FULL_TEXTAREA_CLASS,
+                "text-transparent caret-foreground"
+              )}
               maxLength={8000}
               onChange={(event) => setCaret(event.target.selectionStart)}
               onKeyDown={(event) => {
@@ -185,13 +203,14 @@ function GroupComposerForm({
               }}
               onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
               onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
-              placeholder="Message the group, @mention an agent or @all"
+              placeholder={placeholder}
               ref={inputRef}
             />
           </div>
         </PromptInputBody>
-        <PromptInputFooter className="w-full flex-nowrap items-center justify-end gap-1.5 border-0 px-0 py-0 pt-1">
-          {busy ? (
+        <PromptInputFooter className="w-auto shrink-0 flex-nowrap items-center justify-end gap-1.5 border-0 p-0">
+          {/* One button at a time: Stop while agents reply, Send once you type. */}
+          {busy && !draft.trim() ? (
             <Button
               aria-label="Stop after this reply"
               className={composerSubmitButtonClassName}
@@ -200,18 +219,18 @@ function GroupComposerForm({
               size="icon-sm"
               title="Stop after this reply"
               type="button"
-              variant={draft.trim() ? "outline" : "default"}
             >
               <StopIcon />
             </Button>
-          ) : null}
-          <PromptInputSubmit
-            aria-label={busy ? "Add to the conversation" : "Send message"}
-            className={composerSubmitButtonClassName}
-            disabled={!draft.trim()}
-          >
-            <ArrowUp02Icon className="size-4" />
-          </PromptInputSubmit>
+          ) : (
+            <PromptInputSubmit
+              aria-label={busy ? "Add to the conversation" : "Send message"}
+              className={composerSubmitButtonClassName}
+              disabled={!draft.trim()}
+            >
+              <ArrowUp02Icon className="size-4" />
+            </PromptInputSubmit>
+          )}
         </PromptInputFooter>
       </PromptInput>
     </div>

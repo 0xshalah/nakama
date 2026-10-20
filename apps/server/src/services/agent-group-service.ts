@@ -2,9 +2,11 @@ import type { ImageAttachment, OrgRole, ProfileSummary } from "@nakama/core";
 import { NakamaApiError } from "@nakama/core";
 import {
   type AgentGroup,
+  type AgentGroupMessage,
   type AgentGroupRun,
   type AgentGroupSession,
   type AgentGroupSessionDetail,
+  type AgentGroupThreadDetail,
   groupSessionTitle,
   memberHandles,
   mentionedMemberIds,
@@ -13,7 +15,13 @@ import { validateImageAttachments } from "@nakama/core/message-content";
 import { filterProfilesForChatAccess } from "@nakama/core/profiles";
 import type { DatabaseAdapter } from "@nakama/db";
 import { failSubAgentResult } from "../tools/sub-agent-shared";
-import { groupMembers, groupTask, transcript } from "./agent-group-prompt";
+import {
+  groupMembers,
+  groupTask,
+  threadTask,
+  threadTranscript,
+  transcript,
+} from "./agent-group-prompt";
 import {
   appendAgentGroupMessage,
   createAgentGroup,
@@ -23,9 +31,11 @@ import {
   deleteGroupSession,
   getAgentGroup,
   getAgentGroupAvatar,
+  getAgentGroupMessage,
   getGroupSession,
   listAgentGroupMessages,
   listAgentGroups,
+  listAgentGroupThreadMessages,
   listGroupSessions,
   type StoredGroupSession,
   setAgentGroupAvatar,
@@ -51,12 +61,21 @@ interface ActiveRun extends AgentGroupRun {
   queue: string[];
 }
 
+/** An agent answering the user in one thread; at most one per thread. */
+interface ThreadRun extends AgentGroupRun {
+  /** The user wrote again while the agent was replying. */
+  again: boolean;
+}
+
 export class AgentGroupService {
   // ponytail: run state lives in this process. A restart ends a run (saved
   // replies stay), and with several server instances behind one URL, Stop and
   // `active` only reach the instance running the turn. Move it to the database
   // when runs must be shared across instances.
   private readonly runs = new Map<string, ActiveRun>();
+
+  /** Thread runs, keyed by `sessionId:rootId`. */
+  private readonly threadRuns = new Map<string, ThreadRun>();
 
   constructor(
     private readonly db: Pick<DatabaseAdapter, "getOrgMember" | "getUserById">,
@@ -78,11 +97,12 @@ export class AgentGroupService {
     orgId: string,
     userId: string,
     name: string,
-    memberIds: string[]
+    memberIds: string[],
+    brief = ""
   ): Promise<AgentGroup> {
     await this.assertMembers(orgId, userId, memberIds, []);
 
-    return createAgentGroup(orgId, userId, name, memberIds);
+    return createAgentGroup(orgId, userId, name, memberIds, brief);
   }
 
   /** Members kept from before may have lost access; only new ones are checked. */
@@ -91,11 +111,12 @@ export class AgentGroupService {
     userId: string,
     groupId: string,
     name: string,
-    memberIds: string[]
+    memberIds: string[],
+    brief = ""
   ): Promise<AgentGroup> {
     const group = requireGroup(orgId, userId, groupId);
     await this.assertMembers(orgId, userId, memberIds, group.memberIds);
-    updateAgentGroup(orgId, userId, groupId, name, memberIds);
+    updateAgentGroup(orgId, userId, groupId, name, memberIds, brief);
 
     return requireGroup(orgId, userId, groupId);
   }
@@ -189,7 +210,101 @@ export class AgentGroupService {
           }
         : null,
       session: this.withActive(session),
+      threadRunIds: [...this.threadRuns.keys()].flatMap((key) =>
+        key.startsWith(`${sessionId}:`)
+          ? [Number(key.slice(sessionId.length + 1))]
+          : []
+      ),
     };
+  }
+
+  thread(
+    orgId: string,
+    userId: string,
+    groupId: string,
+    sessionId: string,
+    rootId: number
+  ): AgentGroupThreadDetail {
+    requireGroup(orgId, userId, groupId);
+    requireSession(orgId, userId, groupId, sessionId);
+    const root = requireThreadRoot(orgId, sessionId, rootId);
+    const run = this.threadRuns.get(threadKey(sessionId, rootId));
+
+    return {
+      messages: [
+        root,
+        ...listAgentGroupThreadMessages(orgId, sessionId, rootId),
+      ],
+      profileId: root.authorProfileId ?? "",
+      rootId,
+      run: run
+        ? {
+            activity: run.activity,
+            speakerProfileId: run.speakerProfileId,
+            stopping: run.stopping,
+          }
+        : null,
+    };
+  }
+
+  /**
+   * Saves the user's message in the thread and has the thread's agent answer
+   * it in the background. A message sent while the agent replies is answered
+   * in the same run, once.
+   */
+  postThread(
+    orgId: string,
+    userId: string,
+    groupId: string,
+    sessionId: string,
+    rootId: number,
+    content: string
+  ): Promise<void> {
+    const session = requireSession(orgId, userId, groupId, sessionId);
+    const root = requireThreadRoot(orgId, sessionId, rootId);
+    const key = threadKey(sessionId, rootId);
+    const active = this.threadRuns.get(key);
+
+    appendAgentGroupMessage(orgId, session, null, content, rootId);
+
+    if (active) {
+      active.again = true;
+      active.stopping = false;
+
+      return Promise.resolve();
+    }
+
+    const run: ThreadRun = {
+      activity: null,
+      again: true,
+      speakerProfileId: root.authorProfileId,
+      stopping: false,
+    };
+
+    this.threadRuns.set(key, run);
+
+    return this.replyInThread(orgId, userId, session, root, run).finally(() => {
+      if (this.threadRuns.get(key) === run) {
+        this.threadRuns.delete(key);
+      }
+    });
+  }
+
+  stopThread(
+    orgId: string,
+    userId: string,
+    groupId: string,
+    sessionId: string,
+    rootId: number
+  ): void {
+    requireSession(orgId, userId, groupId, sessionId);
+
+    const run = this.threadRuns.get(threadKey(sessionId, rootId));
+
+    if (run) {
+      run.stopping = true;
+      run.again = false;
+    }
   }
 
   /**
@@ -390,6 +505,77 @@ export class AgentGroupService {
     }
   }
 
+  private async replyInThread(
+    orgId: string,
+    userId: string,
+    session: StoredGroupSession,
+    root: AgentGroupMessage,
+    run: ThreadRun
+  ): Promise<void> {
+    const profileId = root.authorProfileId;
+
+    while (run.again && !run.stopping && profileId) {
+      run.again = false;
+
+      const group = getAgentGroup(orgId, userId, session.groupId);
+      const access = await this.access(orgId, userId);
+      const members = group ? groupMembers(group, access.profiles) : [];
+      const speaker = members.find((p) => p.id === profileId);
+
+      if (!(group && speaker)) {
+        appendAgentGroupMessage(
+          orgId,
+          session,
+          profileId,
+          "_Skipped: no access_",
+          root.id
+        );
+
+        return;
+      }
+
+      const handles = memberHandles(members);
+
+      const result = await this.agent
+        .runSubAgentPrompt({
+          agentDepth: 1,
+          context: threadTranscript(
+            orgId,
+            session.id,
+            root.id,
+            handles,
+            members
+          ),
+          onActivity: (label) => {
+            run.activity = label;
+          },
+          orgId,
+          orgRole: access.orgRole,
+          profileId,
+          task: threadTask(group, speaker, handles),
+          userId,
+        })
+        .catch((error) =>
+          failSubAgentResult(
+            error instanceof Error ? error.message : String(error)
+          )
+        );
+
+      const text = result.output.trim();
+
+      appendAgentGroupMessage(
+        orgId,
+        session,
+        profileId,
+        result.status === "success" && text
+          ? text
+          : `_${result.error ?? "No reply."}_`,
+        root.id
+      );
+      run.activity = null;
+    }
+  }
+
   private async assertMembers(
     orgId: string,
     userId: string,
@@ -464,6 +650,25 @@ function enqueue(queue: string[], ids: string[]): void {
       queue.push(id);
     }
   }
+}
+
+function threadKey(sessionId: string, rootId: number): string {
+  return `${sessionId}:${rootId}`;
+}
+
+/** A thread opens on an agent's message in the main chat. */
+function requireThreadRoot(
+  orgId: string,
+  sessionId: string,
+  rootId: number
+): AgentGroupMessage {
+  const root = getAgentGroupMessage(orgId, sessionId, rootId);
+
+  if (!root?.authorProfileId) {
+    throw new NakamaApiError("Message not found", 404);
+  }
+
+  return root;
 }
 
 function requireGroup(

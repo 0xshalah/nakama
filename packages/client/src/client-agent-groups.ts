@@ -2,6 +2,7 @@ import type {
   AgentGroup,
   AgentGroupSession,
   AgentGroupSessionDetail,
+  AgentGroupThreadDetail,
   ListAgentGroupSessionsResponse,
   ListAgentGroupsResponse,
   ListRailPinsResponse,
@@ -10,6 +11,7 @@ import type { ImageAttachment } from "@nakama/core/contract";
 import { OrgMemoryClient } from "./client-org-memory";
 
 interface AgentGroupInput {
+  brief?: string;
   memberIds: string[];
   name: string;
 }
@@ -20,6 +22,14 @@ function agentGroupPath(groupId: string): string {
 
 function agentGroupSessionPath(groupId: string, sessionId: string): string {
   return `${agentGroupPath(groupId)}/sessions/${encodeURIComponent(sessionId)}`;
+}
+
+function agentGroupThreadPath(
+  groupId: string,
+  sessionId: string,
+  messageId: number
+): string {
+  return `${agentGroupSessionPath(groupId, sessionId)}/threads/${messageId}`;
 }
 
 /** Agent groups, their sessions, and the agents and groups pinned in the rail. */
@@ -148,5 +158,38 @@ export class AgentGroupsClient extends OrgMemoryClient {
     await this.request(`/v1/rail-pins/${encodeURIComponent(itemId)}`, {
       method: pinned ? "PUT" : "DELETE",
     });
+  }
+
+  async getAgentGroupThread(
+    groupId: string,
+    sessionId: string,
+    messageId: number
+  ): Promise<AgentGroupThreadDetail> {
+    return this.request<AgentGroupThreadDetail>(
+      agentGroupThreadPath(groupId, sessionId, messageId)
+    );
+  }
+
+  async sendAgentGroupThreadMessage(
+    groupId: string,
+    sessionId: string,
+    messageId: number,
+    content: string
+  ): Promise<void> {
+    await this.request(
+      `${agentGroupThreadPath(groupId, sessionId, messageId)}/messages`,
+      { body: JSON.stringify({ content }), method: "POST" }
+    );
+  }
+
+  async stopAgentGroupThread(
+    groupId: string,
+    sessionId: string,
+    messageId: number
+  ): Promise<void> {
+    await this.request(
+      `${agentGroupThreadPath(groupId, sessionId, messageId)}/stop`,
+      { method: "POST" }
+    );
   }
 }

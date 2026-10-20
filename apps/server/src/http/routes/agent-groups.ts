@@ -4,10 +4,12 @@ import type {
   AgentGroup,
   AgentGroupSession,
   AgentGroupSessionDetail,
+  AgentGroupThreadDetail,
   ListAgentGroupSessionsResponse,
   ListAgentGroupsResponse,
   ListRailPinsResponse,
 } from "@nakama/core/agent-groups";
+import type { Context } from "hono";
 import { AgentGroupService } from "../../services/agent-group-service";
 import { listRailPins, setRailPin } from "../../services/agent-group-store";
 import type { ServerOptions } from "../context";
@@ -19,6 +21,7 @@ import { json, readJson } from "../shared";
 import type { HonoApp } from "../types";
 
 const groupSchema = z.object({
+  brief: z.string().trim().max(4000).default(""),
   memberIds: z.array(z.string().min(1)).min(2).max(12),
   name: z.string().trim().min(1).max(80),
 });
@@ -39,6 +42,7 @@ const sessionChangesSchema = z
   });
 
 const SESSION_PATH = "/v1/agent-groups/{groupId}/sessions/{sessionId}";
+const THREAD_PATH = `${SESSION_PATH}/threads/{messageId}`;
 
 // [method, path, summary, status, body]: documents the plain routes below in
 // /openapi.json.
@@ -87,6 +91,15 @@ const DOCUMENTED_ROUTES: [
     messageSchema,
   ],
   ["post", `${SESSION_PATH}/stop`, "Stop after the current reply", 204],
+  ["get", THREAD_PATH, "Get a thread on an agent's message", 200],
+  [
+    "post",
+    `${THREAD_PATH}/messages`,
+    "Send a message in a thread; its agent replies in the background",
+    204,
+    messageSchema,
+  ],
+  ["post", `${THREAD_PATH}/stop`, "Stop a thread's reply", 204],
   [
     "get",
     "/v1/rail-pins",
@@ -153,7 +166,13 @@ export function registerAgentGroupRoutes(
     const body = await readJson(c.req.raw, groupSchema);
 
     return json<AgentGroup>(
-      await service.create(orgId, auth.user.id, body.name, body.memberIds),
+      await service.create(
+        orgId,
+        auth.user.id,
+        body.name,
+        body.memberIds,
+        body.brief
+      ),
       201
     );
   });
@@ -181,7 +200,8 @@ export function registerAgentGroupRoutes(
         auth.user.id,
         c.req.param("groupId"),
         body.name,
-        body.memberIds
+        body.memberIds,
+        body.brief
       )
     );
   });
@@ -329,6 +349,70 @@ export function registerAgentGroupRoutes(
 
     return c.body(null, 204);
   });
+
+  const threadParams = (c: Context) => {
+    const messageId = Number(c.req.param("messageId"));
+
+    if (!Number.isSafeInteger(messageId)) {
+      throw new NakamaApiError("Invalid message id", 400);
+    }
+
+    return {
+      groupId: c.req.param("groupId") ?? "",
+      messageId,
+      orgId: requireActiveOrgIdFromContext(c),
+      sessionId: c.req.param("sessionId") ?? "",
+      userId: requireOrgMemberFromContext(c).user.id,
+    };
+  };
+
+  app.get(
+    "/v1/agent-groups/:groupId/sessions/:sessionId/threads/:messageId",
+    (c) => {
+      const t = threadParams(c);
+
+      return json<AgentGroupThreadDetail>(
+        service.thread(t.orgId, t.userId, t.groupId, t.sessionId, t.messageId)
+      );
+    }
+  );
+
+  app.post(
+    "/v1/agent-groups/:groupId/sessions/:sessionId/threads/:messageId/messages",
+    async (c) => {
+      const t = threadParams(c);
+      const { content } = await readJson(c.req.raw, messageSchema);
+
+      service
+        .postThread(
+          t.orgId,
+          t.userId,
+          t.groupId,
+          t.sessionId,
+          t.messageId,
+          content
+        )
+        .catch(logRunFailure(t.groupId));
+
+      return c.body(null, 204);
+    }
+  );
+
+  app.post(
+    "/v1/agent-groups/:groupId/sessions/:sessionId/threads/:messageId/stop",
+    (c) => {
+      const t = threadParams(c);
+      service.stopThread(
+        t.orgId,
+        t.userId,
+        t.groupId,
+        t.sessionId,
+        t.messageId
+      );
+
+      return c.body(null, 204);
+    }
+  );
 
   // Rail pins cover agents and groups alike; an unknown id only reorders nothing.
   app.get("/v1/rail-pins", (c) => {

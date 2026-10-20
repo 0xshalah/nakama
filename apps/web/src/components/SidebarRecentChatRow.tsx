@@ -29,8 +29,6 @@ function RecentChatActions({
   onTogglePin,
   onDetach,
   onMove,
-  onToggleCollapse,
-  collapsed,
   canMoveUp,
   canMoveDown,
 }: {
@@ -41,8 +39,6 @@ function RecentChatActions({
   onTogglePin: () => void;
   onDetach?: () => void;
   onMove?: (direction: "up" | "down") => void;
-  onToggleCollapse?: () => void;
-  collapsed: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
 }) {
@@ -63,11 +59,6 @@ function RecentChatActions({
           <MoreHorizontalIcon aria-hidden="true" className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {onToggleCollapse ? (
-            <DropdownMenuItem onClick={onToggleCollapse}>
-              {collapsed ? "Expand branches" : "Collapse branches"}
-            </DropdownMenuItem>
-          ) : null}
           <DropdownMenuItem onClick={() => onRename({ id: session.id, title })}>
             <PencilEdit02Icon aria-hidden="true" className="size-4" />
             Rename
@@ -122,10 +113,7 @@ export function RecentChatRow({
   onRename,
   onDelete,
   onTogglePin,
-  childCount = 0,
-  collapsed = false,
   depth = 0,
-  onToggleCollapse,
   onDetach,
   onMove,
   onPointerStartDrag,
@@ -138,10 +126,7 @@ export function RecentChatRow({
   onRename: (target: SessionTarget) => void;
   onDelete: (target: SessionTarget) => void;
   onTogglePin: () => void;
-  childCount?: number;
-  collapsed?: boolean;
   depth?: number;
-  onToggleCollapse?: () => void;
   onDetach?: () => void;
   onMove?: (direction: "up" | "down") => void;
   onPointerStartDrag?: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -193,12 +178,10 @@ export function RecentChatRow({
         <RecentChatActions
           canMoveDown={canMoveDown}
           canMoveUp={canMoveUp}
-          collapsed={collapsed}
           onDelete={onDelete}
           onDetach={onDetach}
           onMove={onMove}
           onRename={onRename}
-          onToggleCollapse={childCount > 0 ? onToggleCollapse : undefined}
           onTogglePin={onTogglePin}
           session={session}
           title={title}

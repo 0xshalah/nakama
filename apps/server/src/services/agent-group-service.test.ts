@@ -129,6 +129,29 @@ describe("AgentGroupService", () => {
     expect(calls).toHaveLength(6);
   });
 
+  test("every agent gets the group brief as context", async () => {
+    const tasks: string[] = [];
+    const { chat, service } = setup(({ task }) => {
+      tasks.push(task);
+
+      return "ok";
+    });
+    const group = await service.create(
+      ORG_ID,
+      USER_ID,
+      "Team",
+      ["a", "b"],
+      "Launch v2 on Friday"
+    );
+
+    await chat(group.id, "@all hi");
+
+    expect(tasks).toHaveLength(2);
+    expect(tasks.every((task) => task.includes("Launch v2 on Friday"))).toBe(
+      true
+    );
+  });
+
   test("without a mention the session's last speaker replies, else the first member", async () => {
     const { calls, chat, service } = setup(() => "ok");
     const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
@@ -293,5 +316,67 @@ describe("AgentGroupService", () => {
 
     expect(calls).toEqual(["a"]);
     expect(service.sessions(ORG_ID, USER_ID, group.id)).toEqual([]);
+  });
+
+  test("a thread is answered by the agent it hangs from, and stays out of the main chat", async () => {
+    const { calls, chat, contents, service } = setup(({ profileId, task }) =>
+      task.includes("private thread") ? "thread answer" : `${profileId} spoke`
+    );
+
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const sessionId = await chat(group.id, "@beta hello");
+    const [, root] = service.session(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId
+    ).messages;
+
+    calls.length = 0;
+    await service.postThread(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId,
+      root!.id,
+      "more?"
+    );
+
+    expect(calls).toEqual(["b"]);
+    expect(contents(group.id, sessionId)).toEqual(["@beta hello", "b spoke"]);
+
+    const thread = service.thread(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId,
+      root!.id
+    );
+
+    expect(thread.profileId).toBe("b");
+    expect(thread.messages.map((message) => message.content)).toEqual([
+      "b spoke",
+      "more?",
+      "thread answer",
+    ]);
+    expect(
+      service.session(ORG_ID, USER_ID, group.id, sessionId).messages[1]
+    ).toMatchObject({ threadReplies: 2 });
+  });
+
+  test("a thread cannot open on the user's own message", async () => {
+    const { chat, service } = setup(() => "ok");
+    const group = await service.create(ORG_ID, USER_ID, "Team", ["a", "b"]);
+    const sessionId = await chat(group.id, "@alpha hi");
+    const [own] = service.session(
+      ORG_ID,
+      USER_ID,
+      group.id,
+      sessionId
+    ).messages;
+
+    expect(() =>
+      service.thread(ORG_ID, USER_ID, group.id, sessionId, own!.id)
+    ).toThrow("Message not found");
   });
 });

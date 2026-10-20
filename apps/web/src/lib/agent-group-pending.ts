@@ -21,6 +21,7 @@ export function pendingMessage(content: string): AgentGroupMessage {
     content,
     createdAt: new Date().toISOString(),
     id: -Date.now(),
+    threadReplies: 0,
   };
 }
 

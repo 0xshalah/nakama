@@ -16,6 +16,15 @@ export const queryKeys = {
       ["agentGroups", groupId, "sessions", sessionId] as const,
     sessions: (groupId: string) =>
       ["agentGroups", groupId, "sessions"] as const,
+    thread: (groupId: string, sessionId: string, messageId: number) =>
+      [
+        "agentGroups",
+        groupId,
+        "sessions",
+        sessionId,
+        "threads",
+        messageId,
+      ] as const,
   },
   artifacts: {
     profile: (profileId: string) => ["artifacts", profileId] as const,
