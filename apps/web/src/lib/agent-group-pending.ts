@@ -4,6 +4,9 @@ import type {
   AgentGroupSessionDetail,
 } from "@nakama/core/agent-groups";
 
+/** Search params of the side panel; one is open at a time. */
+export const PANELS = ["files", "live", "memory", "thread"] as const;
+
 /** Shown until the server confirms a reply run, so the page reacts at once. */
 export const PENDING_RUN: AgentGroupRun = {
   activity: null,

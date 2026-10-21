@@ -1,9 +1,7 @@
 import { Button } from "@nakama/ui";
 import { BrainIcon, Folder01Icon } from "hugeicons-react";
 import { useSearchParams } from "react-router-dom";
-
-/** Search params of the side panel; one is open at a time. */
-export const PANELS = ["files", "live", "memory", "thread"] as const;
+import { PANELS } from "@/lib/agent-group-pending";
 
 /** Opens the group's shared folder or memory in the side panel. */
 function GroupPanelButton({

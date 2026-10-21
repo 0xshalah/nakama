@@ -26,10 +26,7 @@ import { GroupComposer } from "@/components/agent-groups/group-composer";
 import { GroupDialog } from "@/components/agent-groups/group-dialog";
 import { GroupMemoryPanel } from "@/components/agent-groups/group-memory-panel";
 import { GroupMessageList } from "@/components/agent-groups/group-message-list";
-import {
-  GroupPanelButtons,
-  PANELS,
-} from "@/components/agent-groups/group-panel-buttons";
+import { GroupPanelButtons } from "@/components/agent-groups/group-panel-buttons";
 import {
   GroupFilesPanel,
   GroupLivePanel,
@@ -40,6 +37,7 @@ import { ChatAttachmentPanelProvider } from "@/context/chat-attachment-panel-con
 import { useAgentGroupQuery } from "@/hooks/use-agent-groups";
 import { useProfilesQuery } from "@/hooks/use-app-queries";
 import {
+  PANELS,
   PENDING_RUN,
   pendingMessage,
   withPendingMessage,
