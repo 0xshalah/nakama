@@ -190,7 +190,7 @@ describe("AgentGroupService", () => {
 
     expect(lines).toContain(first);
     expect(lines[lines.indexOf(first) + 1]).toBe("[truncated]");
-    expect(tasks[1]).not.toContain("bbb");
+    expect(lines).not.toContain(`- ${"b".repeat(200)}`);
   });
 
   test("@all gives every member a turn, in member order", async () => {
