@@ -262,7 +262,7 @@ export function GroupDialog({
           onSubmit={(event) => {
             event.preventDefault();
 
-            if (save.isPending || imageError) {
+            if (save.isPending) {
               return;
             }
 
@@ -295,7 +295,7 @@ export function GroupDialog({
                 placeholder="Group name"
                 value={name}
               />
-              {hasImage || imageError ? (
+              {hasImage ? (
                 <Button
                   onClick={() => {
                     setImage(group?.avatarVersion ? null : undefined);
@@ -353,7 +353,6 @@ export function GroupDialog({
             <Button
               disabled={
                 save.isPending ||
-                Boolean(imageError) ||
                 !name.trim() ||
                 memberIds.length < 2 ||
                 memberIds.length > 12
