@@ -1,7 +1,7 @@
 import type { ProfileSummary } from "@nakama/core";
 import type { AgentGroup } from "@nakama/core/agent-groups";
 import type { ImageAttachment } from "@nakama/core/contract";
-import { parseDataUrl } from "@nakama/core/message-content";
+import { MAX_IMAGE_BYTES, parseDataUrl } from "@nakama/core/message-content";
 import {
   Button,
   Dialog,
@@ -188,11 +188,17 @@ export function GroupDialog({
   onClose: () => void;
   onSaved?: (group: AgentGroup) => void;
 }) {
+  const initialValues = group ?? {
+    brief: "",
+    memberIds: [],
+    name: "",
+  };
+
   const { data: profiles = [] } = useProfilesQuery();
   const save = useSaveGroup(group?.id);
-  const [name, setName] = useState(group?.name ?? "");
-  const [brief, setBrief] = useState(group?.brief ?? "");
-  const [memberIds, setMemberIds] = useState(group?.memberIds ?? []);
+  const [name, setName] = useState(initialValues.name);
+  const [brief, setBrief] = useState(initialValues.brief);
+  const [memberIds, setMemberIds] = useState(initialValues.memberIds);
   const [image, setImage] = useState<ImageAttachment | null | undefined>();
   const [preview, setPreview] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -200,6 +206,18 @@ export function GroupDialog({
 
   async function chooseImage(file: File | undefined) {
     if (!file) {
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_BYTES) {
+      setImageError("Choose an image that is 5 MB or smaller.");
+
+      return;
+    }
+
+    if (!IMAGE_TYPES.split(",").includes(file.type)) {
+      setImageError("Choose a PNG, JPEG, GIF, or WebP image.");
+
       return;
     }
 
@@ -243,6 +261,11 @@ export function GroupDialog({
           id="group-form"
           onSubmit={(event) => {
             event.preventDefault();
+
+            if (save.isPending || imageError) {
+              return;
+            }
+
             save.mutate(
               { brief: brief.trim(), image, memberIds, name: name.trim() },
               {
@@ -272,11 +295,12 @@ export function GroupDialog({
                 placeholder="Group name"
                 value={name}
               />
-              {hasImage ? (
+              {hasImage || imageError ? (
                 <Button
                   onClick={() => {
                     setImage(group?.avatarVersion ? null : undefined);
                     setPreview(null);
+                    setImageError(null);
                   }}
                   size="sm"
                   type="button"
@@ -329,6 +353,7 @@ export function GroupDialog({
             <Button
               disabled={
                 save.isPending ||
+                Boolean(imageError) ||
                 !name.trim() ||
                 memberIds.length < 2 ||
                 memberIds.length > 12
