@@ -1727,6 +1727,12 @@ test("create group with invalid group photo", async () => {
     });
 
     expect(create).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(group.id, {
+      brief: draft.brief,
+      memberIds: draft.memberIds,
+      name: draft.name,
+    });
     expect(upload).toHaveBeenCalledTimes(2);
     expect(upload).toHaveBeenNthCalledWith(1, group.id, draft.image);
     expect(upload).toHaveBeenNthCalledWith(2, group.id, draft.image);
