@@ -188,17 +188,11 @@ export function GroupDialog({
   onClose: () => void;
   onSaved?: (group: AgentGroup) => void;
 }) {
-  const initialValues = group ?? {
-    brief: "",
-    memberIds: [],
-    name: "",
-  };
-
   const { data: profiles = [] } = useProfilesQuery();
   const save = useSaveGroup(group?.id);
-  const [name, setName] = useState(initialValues.name);
-  const [brief, setBrief] = useState(initialValues.brief);
-  const [memberIds, setMemberIds] = useState(initialValues.memberIds);
+  const [name, setName] = useState(group?.name ?? "");
+  const [brief, setBrief] = useState(group?.brief ?? "");
+  const [memberIds, setMemberIds] = useState(group?.memberIds ?? []);
   const [image, setImage] = useState<ImageAttachment | null | undefined>();
   const [preview, setPreview] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -208,6 +202,9 @@ export function GroupDialog({
     if (!file) {
       return;
     }
+
+    setImage(undefined);
+    setPreview(null);
 
     if (file.size > MAX_IMAGE_BYTES) {
       setImageError("Choose an image that is 5 MB or smaller.");
