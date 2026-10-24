@@ -130,7 +130,14 @@ MIT
 
 ## Maintainers
 
-Nakama is maintained by [@ahmadrosid](https://github.com/ahmadrosid) and [@fajarhide](https://github.com/fajarhide).
+<p align="center">
+  <a href="https://github.com/ahmadrosid"><img src="https://images.weserv.nl/?url=github.com/ahmadrosid.png&mask=circle&w=96&h=96" width="96" alt="ahmadrosid" /></a>
+  <a href="https://github.com/fajarhide"><img src="https://images.weserv.nl/?url=github.com/fajarhide.png&mask=circle&w=96&h=96" width="96" alt="fajarhide" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ahmadrosid">@ahmadrosid</a> and <a href="https://github.com/fajarhide">@fajarhide</a>
+</p>
 
 ## Contributors
 
