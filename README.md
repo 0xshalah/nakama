@@ -128,6 +128,10 @@ Interactive API docs are at `http://127.0.0.1:4310/docs`.
 
 MIT
 
+## Maintainers
+
+Nakama is maintained by [@ahmadrosid](https://github.com/ahmadrosid) and [@fajarhide](https://github.com/fajarhide).
+
 ## Contributors
 
 Thanks to everyone who helps make Nakama better.
