@@ -10,7 +10,11 @@ import type {
   StreamChatHandlers,
   WireApi,
 } from "@nakama/core";
-import { fetchWithoutIdleTimeout, normalizeBaseUrl } from "@nakama/core";
+import {
+  fetchWithoutIdleTimeout,
+  normalizeBaseUrl,
+  ProviderStreamInterruptedError,
+} from "@nakama/core";
 import OpenAI from "openai";
 import {
   parseOpenAIToolCalls,
@@ -22,6 +26,7 @@ import { openAIModelRejectsChatToolsWithReasoning } from "../openai/thinking";
 import {
   buildChatCompletionResult,
   buildProviderHttpError,
+  buildProviderResponseError,
   extractOpenAITokenUsage,
   finalizePendingToolCalls,
   mergePendingToolCall,
@@ -46,6 +51,8 @@ export interface OpenAICompatibleProviderOptions {
   apiKey: string;
   baseUrl: string;
   displayName: string;
+  /** Sent as `max_tokens` on chat requests. Unset leaves the provider default. */
+  maxOutputTokens?: number;
   model: string;
   providerName?: ProviderClient["name"];
   supportsThinking: boolean;
@@ -86,6 +93,7 @@ export function createOpenAICompatibleProvider(
       }
 
       return requestChatCompletion(client, label, {
+        maxOutputTokens: options.maxOutputTokens,
         messages: input.messages,
         model,
         netra: options.providerName === "netra",
@@ -121,7 +129,9 @@ export function createOpenAICompatibleProvider(
         const content = result.content.trim();
 
         if (!content) {
-          throw new Error(`${label} returned an empty response.`);
+          throw buildProviderResponseError(
+            `${label} returned an empty response.`
+          );
         }
 
         const textResult: GenerateTextResult = { content };
@@ -165,6 +175,7 @@ export function createOpenAICompatibleProvider(
         baseUrl,
         handlers,
         label,
+        maxOutputTokens: options.maxOutputTokens,
         messages: input.messages,
         model,
         netra: options.providerName === "netra",
@@ -303,6 +314,7 @@ async function requestChatCompletion(
   client: OpenAI,
   label: string,
   options: {
+    maxOutputTokens?: number;
     model: string;
     system: string;
     messages: ChatMessage[];
@@ -332,6 +344,10 @@ async function requestChatCompletion(
       request.tools = toOpenAITools(options.tools);
     }
 
+    if (options.maxOutputTokens) {
+      request.max_tokens = options.maxOutputTokens;
+    }
+
     const completion = await client.chat.completions.create(request, {
       signal: options.signal,
     });
@@ -358,7 +374,7 @@ async function requestChatCompletion(
       toolCalls.length === 0 &&
       !thinking?.trim()
     ) {
-      throw new Error(`${label} returned an empty response.`);
+      throw buildProviderResponseError(`${label} returned an empty response.`);
     }
 
     return buildChatCompletionResult({
@@ -376,6 +392,7 @@ async function requestChatCompletion(
 
 async function streamChatCompletion(options: {
   label: string;
+  maxOutputTokens?: number;
   baseUrl: string;
   apiKey: string;
   model: string;
@@ -406,6 +423,10 @@ async function streamChatCompletion(options: {
   if (options.tools?.length) {
     requestBody.tool_choice = "auto";
     requestBody.tools = toOpenAITools(options.tools);
+  }
+
+  if (options.maxOutputTokens) {
+    requestBody.max_tokens = options.maxOutputTokens;
   }
 
   const response = await fetchWithoutIdleTimeout(
@@ -442,7 +463,9 @@ async function streamChatCompletion(options: {
   }
 
   if (!response.body) {
-    throw new Error(`${options.label} returned an empty stream.`);
+    throw buildProviderResponseError(
+      `${options.label} returned an empty stream.`
+    );
   }
 
   let content = "";
@@ -473,7 +496,7 @@ async function streamChatCompletion(options: {
     if (options.netra && (event === "error" || payload.error)) {
       const detail = payload.error ? readStreamErrorMessage(payload.error) : "";
 
-      throw new Error(
+      throw new ProviderStreamInterruptedError(
         `${options.label} stream failed after it started${detail ? `: ${detail}` : "."}`
       );
     }
@@ -521,7 +544,9 @@ async function streamChatCompletion(options: {
   });
 
   if (options.netra && !ended) {
-    throw new Error(`${options.label} stream ended before [DONE].`);
+    throw new ProviderStreamInterruptedError(
+      `${options.label} stream ended before [DONE].`
+    );
   }
 
   const toolCalls = finalizePendingToolCalls(pending);
@@ -531,7 +556,9 @@ async function streamChatCompletion(options: {
     toolCalls.length === 0 &&
     !thinking.trim()
   ) {
-    throw new Error(`${options.label} returned an empty response.`);
+    throw buildProviderResponseError(
+      `${options.label} returned an empty response.`
+    );
   }
 
   return buildChatCompletionResult({
@@ -568,7 +595,7 @@ async function requestCompletion(
     const content = completion.choices[0]?.message?.content?.trim();
 
     if (!content) {
-      throw new Error(`${label} returned an empty response.`);
+      throw buildProviderResponseError(`${label} returned an empty response.`);
     }
 
     const usage = extractOpenAITokenUsage(completion.usage);
