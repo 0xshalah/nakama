@@ -1594,6 +1594,8 @@ export interface WebSearchSettingsResponse {
   configured: boolean;
   endpoint: string | null;
   provider: WebSearchProvider | null;
+  savedAvailable?: boolean;
+  source?: "environment" | "settings" | "missing";
 }
 
 export interface UpdateWebSearchSettingsRequest {
@@ -1741,6 +1743,8 @@ export interface ComposioSettingsResponse {
   apiKeyMasked: string | null;
   composioReachable: boolean;
   configured: boolean;
+  savedAvailable?: boolean;
+  source?: "environment" | "settings" | "missing";
 }
 
 export interface UpdateComposioSettingsRequest {
@@ -1843,9 +1847,11 @@ export interface EmailSettingsResponse {
   imapPort: number | null;
   imapSecure: boolean | null;
   passwordMasked: string | null;
+  savedAvailable?: boolean;
   smtpHost: string | null;
   smtpPort: number | null;
   smtpSecure: boolean | null;
+  source?: "environment" | "settings" | "missing";
   username: string | null;
 }
 
@@ -2023,6 +2029,9 @@ export interface ProviderInstanceSummary {
   label: string;
   modelCount: number;
   openRouterRouting?: OpenRouterRoutingSettings;
+  savedSecretAvailable?: boolean;
+  secretEnvName?: string;
+  secretSource?: "environment" | "settings" | "missing";
   type: ProviderName;
   wireApi?: WireApi | null;
 }
@@ -2033,7 +2042,7 @@ export interface ListProvidersResponse {
 }
 
 export interface CreateProviderRequest {
-  apiKey: string;
+  apiKey?: string;
   baseUrl?: string;
   chatgptOAuth?: ChatgptOAuthCredentials;
   customModels?: CustomModelEntry[];
@@ -2561,9 +2570,13 @@ export interface ToolCredentialStatus {
     /** Only for non-secret variables. */
     value?: string;
   }[];
+  envName: string;
+  savedAvailable: boolean;
+  source: "environment" | "settings" | "missing";
 }
 
 export interface ToolSetupPlan {
+  createdAt?: string;
   description: string;
   id: string;
   name: string;
@@ -2571,7 +2584,7 @@ export interface ToolSetupPlan {
   profileId?: string;
   requiresApiKey: boolean;
   sessionId: string;
-  status: "pending" | "approved" | "ready";
+  status: "pending" | "approved" | "ready" | "rejected";
   toolId?: string;
 }
 

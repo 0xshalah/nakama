@@ -408,6 +408,26 @@ export class SystemClient extends NakamaClientCore {
     );
   }
 
+  async setProviderSecret(
+    providerId: string,
+    apiKey: string
+  ): Promise<UpdateProviderResponse> {
+    return this.request<UpdateProviderResponse>(
+      `/v1/providers/${encodeURIComponent(providerId)}/secret`,
+      { body: JSON.stringify({ apiKey }), method: "PUT" }
+    );
+  }
+
+  async manageProviderSecret(
+    providerId: string,
+    action: "clear" | "use-stored"
+  ): Promise<UpdateProviderResponse> {
+    return this.request<UpdateProviderResponse>(
+      `/v1/providers/${encodeURIComponent(providerId)}/secret${action === "use-stored" ? "/use-stored" : ""}`,
+      { method: action === "clear" ? "DELETE" : "POST" }
+    );
+  }
+
   async deleteProvider(providerId: string): Promise<DeleteProviderResponse> {
     return this.request<DeleteProviderResponse>(
       `/v1/providers/${encodeURIComponent(providerId)}`,
